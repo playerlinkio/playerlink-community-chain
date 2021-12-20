@@ -1,5 +1,5 @@
 [package]
-name = "playerlink-serve"
+name = "pallet-serve"
 version = "0.0.1"
 description = "FRAME pallet template for defining custom runtime logic."
 authors = ["PlayerLink io <https://github.com/playerlinkio>"]
@@ -16,12 +16,16 @@ scale-info = { version = "1.0", default-features = false, features = ["derive"] 
 frame-support = { git = "https://github.com/paritytech/substrate", default-features = false }
 frame-system = { git = "https://github.com/paritytech/substrate", default-features = false }
 frame-benchmarking = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true }
+# important !!
+primitives = { package = "playerlink-primitives", path = "../../primitives", default-features = false }
 
-[dev-dependencies]
+
 sp-core = { git = "https://github.com/paritytech/substrate", default-features = false }
 sp-io = { git = "https://github.com/paritytech/substrate", default-features = false }
 sp-runtime = { git = "https://github.com/paritytech/substrate", default-features = false }
 
+
+#[dev-dependencies]
 [features]
 default = ["std"]
 std = [

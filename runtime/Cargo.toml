@@ -56,7 +56,7 @@ primitives = { package = "playerlink-primitives", path = "../primitives", defaul
 
 
 pallet-template = { path = "../pallets/template",default-features = false}
-#playerlink-serve = { path = "../pallets/serve",default-features = false}
+pallet-serve = { path = "../pallets/serve",default-features = false}
 
 
 
@@ -83,6 +83,7 @@ std = [
 	"pallet-timestamp/std",
 	"pallet-transaction-payment-rpc-runtime-api/std",
 	"pallet-transaction-payment/std",
+	"pallet-serve/std",
 	"sp-api/std",
 	"sp-block-builder/std",
 	"sp-consensus-aura/std",
