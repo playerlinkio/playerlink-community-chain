@@ -239,10 +239,10 @@ impl pallet_sudo::Config for Runtime {
 	type Call = Call;
 }
 
-/// Configure the pallet-template in pallets/template.
-impl pallet_template::Config for Runtime {
-	type Event = Event;
-}
+// /// Configure the pallet-template in pallets/template.
+// impl pallet_template::Config for Runtime {
+// 	type Event = Event;
+// }
 
 parameter_types! {
 	pub const MarketplacePalletId: PalletId = PalletId(*b"pl/serve");
@@ -271,7 +271,7 @@ construct_runtime!(
 		TransactionPayment: pallet_transaction_payment,
 		Sudo: pallet_sudo,
 		// Include the custom logic from the pallet-template in the runtime.
-		TemplateModule: pallet_template,
+		// TemplateModule: pallet_template,
 		Serve: pallet_serve
 	}
 );

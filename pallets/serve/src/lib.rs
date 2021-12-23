@@ -3,14 +3,22 @@
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
 	dispatch::{DispatchError, DispatchResult},
+	sp_runtime::traits::AccountIdConversion,
+	traits::Get,
+	BoundedVec,
 };
+use frame_system::{ensure_signed, pallet_prelude::OriginFor};
 use primitives::Balance;
-use sp_runtime::{traits::One, RuntimeDebug};
 use scale_info::TypeInfo;
+use sp_runtime::{traits::One, RuntimeDebug};
+
+
 pub use pallet::*;
 
 pub type CollectionId = u32;
 pub type ServeId = u32;
+
+
 
 
 /// Serve Collection info
@@ -40,6 +48,30 @@ pub struct Serve<AccountId,BoundedString> {
 }
 
 
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
+pub enum ServeTypes {
+	RecordTime,
+	RecordTimes,
+	RecordNumbers,
+}
+
+
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
+pub enum TimeTypes {
+	Hour,
+	Day,
+	Month,
+	Year,
+}
+
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
+pub enum ServeState {
+	Dev,
+	Test,
+	Prd,
+}
+
+
 /// Collection Serve
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
 pub struct ServeMetadata<BoundedString> {
@@ -55,34 +87,12 @@ pub struct ServeMetadata<BoundedString> {
 	server_limit_times:Option<u32>,
 }
 
-#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
-pub enum ServeTypes {
-	RecordTime,
-	RecordTimes,
-	RecordNumbers,
-}
-
-
-#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
-pub enum TimeTypes {
-	Hour,
-	Day,
-	Month,
-	Year
-}
-
-#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
-pub enum ServeState {
-	Dev,
-	Test,
-	Prd,
-}
-
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
 	use frame_support::{pallet_prelude::*, PalletId};
-	use frame_system::pallet_prelude::*;
+	use frame_system::pallet_prelude::BlockNumberFor;
+
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
@@ -133,14 +143,20 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		CollectionCreated(CollectionId, T::AccountId),
+		CollectionServeCreated(CollectionId, ServeId, T::AccountId),
 	}
 
 	// Errors inform users that something went wrong.
 	#[pallet::error]
 	pub enum Error<T> {
 		NoAvailableCollectionId,
+		CollectionFound,
+		BadMetadata
 	}
 
+
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
@@ -155,21 +171,45 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		// An example dispatchable that may throw a custom error.
-		// #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1))]
-		// pub fn cause_error(origin: OriginFor<T>) -> DispatchResult {
-		// 	let _who = ensure_signed(origin)?;
-		//
-		//
-		// 	match <Something<T>>::get() {
-		// 		None => Err(Error::<T>::NoneValue)?,
-		// 		Some(old) => {
-		// 			let new = old.checked_add(1).ok_or(Error::<T>::StorageOverflow)?;
-		// 			<Something<T>>::put(new);
-		// 			Ok(())
-		// 		},
-		// 	}
-		// }
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+		pub fn add_serve(
+			origin: OriginFor<T>,
+			collection_id:u32,
+			serve_types: ServeTypes,
+			serve_version: Vec<u8>,
+			serve_state:ServeState,
+			serve_switch:bool,
+			serve_name:Vec<u8>,
+			serve_description:Vec<u8>,
+			serve_url:Vec<u8>,
+			serve_price:Balance,
+			server_limit_time:Option<TimeTypes>,
+			server_limit_times:Option<u32>,
+			serve_deposit:Balance
+		) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+			Collections::<T>::get(collection_id).ok_or(Error::<T>::CollectionFound)?;
+			
+			Self::do_add_serve(
+				who,
+				collection_id,
+				serve_types: ServeTypes,
+				serve_version: Vec<u8>,
+				serve_state:ServeState,
+				serve_switch:bool,
+				serve_name:Vec<u8>,
+				serve_description:Vec<u8>,
+				serve_url:Vec<u8>,
+				serve_price:Balance,
+				server_limit_time:Option<TimeTypes>,
+				server_limit_times:Option<u32>,
+				serve_deposit
+			)?;
+
+			Ok(().into())
+		}
+
+
 	}
 }
 
@@ -195,4 +235,75 @@ impl<T: Config> Pallet<T> {
 		Self::deposit_event(Event::CollectionCreated(collection_id, who.clone()));
 		Ok(collection_id)
 	}
+
+	pub fn do_add_serve(
+		who: T::AccountId,
+		collection_id:u32,
+		serve_types: ServeTypes,
+		serve_version: Vec<u8>,
+		serve_state:ServeState,
+		serve_switch:bool,
+		serve_name:Vec<u8>,
+		serve_description:Vec<u8>,
+		serve_url:Vec<u8>,
+		serve_price:Balance,
+		server_limit_time:Option<TimeTypes>,
+		server_limit_times:Option<u32>,
+		serve_deposit:Balance
+	)-> DispatchResult{
+		// Generate account from collection_id
+		let next_collection_serve_id = NextCollectionServeId::<T>::get(collection_id);
+		let escrow_account: <T as frame_system::Config>::AccountId =
+			<T as pallet::Config>::PalletId::get().into_sub_account(next_collection_serve_id);
+
+		let serve_id = NextCollectionServeId::<T>::try_mutate(
+			collection_id,
+			|id| -> Result<CollectionId, DispatchError> {
+				let current_id = *id;
+				*id = id.checked_add(One::one()).ok_or(Error::<T>::NoAvailableCollectionId)?;
+				Ok(current_id)
+			},
+		)?;
+
+		let bounded_serve_version: BoundedVec<u8, T::StringLimit> =
+			serve_version.clone().try_into().map_err(|_| Error::<T>::BadMetadata)?;
+
+		let bounded_serve_name: BoundedVec<u8, T::StringLimit> =
+			serve_name.clone().try_into().map_err(|_| Error::<T>::BadMetadata)?;
+
+		let bounded_serve_description: BoundedVec<u8, T::StringLimit> =
+			serve_description.clone().try_into().map_err(|_| Error::<T>::BadMetadata)?;
+
+		let bounded_serve_url: BoundedVec<u8, T::StringLimit> =
+			serve_url.clone().try_into().map_err(|_| Error::<T>::BadMetadata)?;
+
+
+		let serve_metadata = ServeMetadata{
+			serve_types,
+			serve_version: bounded_serve_version,
+			serve_state,
+			serve_switch,
+			serve_name: bounded_serve_name,
+			serve_description: bounded_serve_description,
+			serve_url: bounded_serve_url,
+			serve_price,
+			server_limit_time,
+			server_limit_times
+		};
+
+		let new_serve = Serve{
+			escrow_account,
+			registered_serve_number: 0,
+			serve_metadata,
+			serve_deposit
+		};
+
+		CollectionServe::<T>::insert(collection_id, serve_id, new_serve);
+
+		Self::deposit_event(Event::CollectionServeCreated(collection_id, serve_id, who));
+		Ok(())
+
+	}
+
+
 }
