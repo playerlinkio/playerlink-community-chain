@@ -6,9 +6,10 @@ use frame_support::{
 	sp_runtime::traits::AccountIdConversion,
 	traits::Get,
 	BoundedVec,
+	inherent::Vec,
 };
 use frame_system::{ensure_signed, pallet_prelude::OriginFor};
-use primitives::Balance;
+// use primitives::Balance;
 use scale_info::TypeInfo;
 use sp_runtime::{traits::One, RuntimeDebug};
 
@@ -17,6 +18,7 @@ pub use pallet::*;
 
 pub type CollectionId = u32;
 pub type ServeId = u32;
+pub type Balance = u128;
 
 
 
@@ -189,20 +191,20 @@ pub mod pallet {
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 			Collections::<T>::get(collection_id).ok_or(Error::<T>::CollectionFound)?;
-			
+
 			Self::do_add_serve(
 				who,
 				collection_id,
-				serve_types: ServeTypes,
-				serve_version: Vec<u8>,
-				serve_state:ServeState,
-				serve_switch:bool,
-				serve_name:Vec<u8>,
-				serve_description:Vec<u8>,
-				serve_url:Vec<u8>,
-				serve_price:Balance,
-				server_limit_time:Option<TimeTypes>,
-				server_limit_times:Option<u32>,
+				serve_types,
+				serve_version,
+				serve_state,
+				serve_switch,
+				serve_name,
+				serve_description,
+				serve_url,
+				serve_price,
+				server_limit_time,
+				server_limit_times,
 				serve_deposit
 			)?;
 
