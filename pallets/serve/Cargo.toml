@@ -38,7 +38,6 @@ std = [
 	"sp-io/std",
 	"sp-core/std",
 	"sp-std/std",
-	"sp-io/std",
 	"sp-runtime/std",
 	"codec/std",
 	"scale-info/std",

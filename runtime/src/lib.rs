@@ -37,6 +37,10 @@ pub use sp_runtime::BuildStorage;
 pub use sp_runtime::{Perbill, Permill};
 use sp_runtime::traits::Convert;
 
+/// Constant values used within the runtime.
+mod constants;
+pub use constants::currency::*;
+
 /// Import the template pallet.
 pub use pallet_serve;
 
@@ -95,7 +99,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	//   `spec_version`, and `authoring_version` are the same between Wasm and native.
 	// This value is set to 100 to notify Polkadot-JS App (https://polkadot.js.org/apps) to use
 	//   the compatible custom types.
-	spec_version: 100,
+	spec_version: 1,
 	impl_version: 1,
 	apis: RUNTIME_API_VERSIONS,
 	transaction_version: 1,
@@ -294,12 +298,15 @@ impl pallet_sudo::Config for Runtime {
 parameter_types! {
 	pub const MarketplacePalletId: PalletId = PalletId(*b"pl/serve");
 	pub const StringLimit: u32 = 50;
+	pub const CreateCollectionDeposit: Balance = PL;
 }
 
 impl pallet_serve::Config for Runtime {
 	type Event = Event;
 	type StringLimit = StringLimit;
 	type PalletId = MarketplacePalletId;
+	type CreateCollectionDeposit = CreateCollectionDeposit;
+	type Currency = Balances;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.

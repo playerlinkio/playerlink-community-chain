@@ -1,13 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::{
-	dispatch::{DispatchError, DispatchResult},
-	sp_runtime::traits::AccountIdConversion,
-	traits::Get,
-	BoundedVec,
-	inherent::Vec,
-};
+use frame_support::{dispatch::{DispatchError, DispatchResult}, sp_runtime::traits::AccountIdConversion, traits::{Currency, ExistenceRequirement::AllowDeath, Get, ReservableCurrency}, BoundedVec, inherent::Vec, ensure};
 use frame_system::{ensure_signed, pallet_prelude::OriginFor};
 // use primitives::Balance;
 use scale_info::TypeInfo;
@@ -21,7 +15,8 @@ pub type ServeId = u32;
 pub type Balance = u128;
 
 
-
+type BalanceOf<T> =
+<<T as pallet::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
 /// Serve Collection info
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
@@ -59,6 +54,14 @@ pub enum ServeTypes {
 
 
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
+pub enum ServeWays {
+	RESTFUL,
+	GRAPHQL,
+	OTHER,
+}
+
+
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
 pub enum TimeTypes {
 	Hour,
 	Day,
@@ -78,9 +81,10 @@ pub enum ServeState {
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
 pub struct ServeMetadata<BoundedString> {
 	serve_types: ServeTypes,
-	serve_version: BoundedString,
+	serve_ways:ServeWays,
 	serve_state:ServeState,
 	serve_switch:bool,
+	serve_version: BoundedString,
 	serve_name:BoundedString,
 	serve_description:BoundedString,
 	serve_url:BoundedString,
@@ -106,6 +110,12 @@ pub mod pallet {
 		/// The maximum length of metadata stored on-chain.
 		#[pallet::constant]
 		type StringLimit: Get<u32>;
+
+		/// The minimum balance to create collection
+		#[pallet::constant]
+		type CreateCollectionDeposit: Get<BalanceOf<Self>>;
+
+		type Currency: Currency<Self::AccountId> + ReservableCurrency<Self::AccountId>;
 	}
 
 	#[pallet::pallet]
@@ -153,7 +163,8 @@ pub mod pallet {
 	pub enum Error<T> {
 		NoAvailableCollectionId,
 		CollectionFound,
-		BadMetadata
+		BadMetadata,
+		NotEnoughBalance
 	}
 
 
@@ -178,9 +189,10 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			collection_id:u32,
 			serve_types: ServeTypes,
-			serve_version: Vec<u8>,
+			serve_ways:ServeWays,
 			serve_state:ServeState,
 			serve_switch:bool,
+			serve_version: Vec<u8>,
 			serve_name:Vec<u8>,
 			serve_description:Vec<u8>,
 			serve_url:Vec<u8>,
@@ -196,9 +208,10 @@ pub mod pallet {
 				who,
 				collection_id,
 				serve_types,
-				serve_version,
+				serve_ways,
 				serve_state,
 				serve_switch,
+				serve_version,
 				serve_name,
 				serve_description,
 				serve_url,
@@ -216,9 +229,20 @@ pub mod pallet {
 }
 
 impl<T: Config> Pallet<T> {
+	// The account ID of the vault
+	fn account_id() -> T::AccountId {
+		<T as Config>::PalletId::get().into_account()
+	}
+
 	pub fn do_registered_server_collection(
 		who: &T::AccountId,
 	) -> Result<CollectionId, DispatchError>{
+
+		// fees
+		let deposit = T::CreateCollectionDeposit::get();
+		<T as Config>::Currency::transfer(who, &Self::account_id(), deposit, AllowDeath)?;
+
+
 		let collection_id =
 			NextCollectionId::<T>::try_mutate(|id| -> Result<CollectionId, DispatchError> {
 				let current_id = *id;
@@ -242,9 +266,10 @@ impl<T: Config> Pallet<T> {
 		who: T::AccountId,
 		collection_id:u32,
 		serve_types: ServeTypes,
-		serve_version: Vec<u8>,
+		serve_ways:ServeWays,
 		serve_state:ServeState,
 		serve_switch:bool,
+		serve_version: Vec<u8>,
 		serve_name:Vec<u8>,
 		serve_description:Vec<u8>,
 		serve_url:Vec<u8>,
@@ -253,10 +278,17 @@ impl<T: Config> Pallet<T> {
 		server_limit_times:Option<u32>,
 		serve_deposit:Balance
 	)-> DispatchResult{
+
+		let who_balance = <T as Config>::Currency::total_balance(&who);
+		let serve_deposit_balance = BalanceOf::<T>::try_from(serve_deposit).map_err(|_| "balance expect u128 type").unwrap();
+		ensure!(who_balance >= serve_deposit_balance,Error::<T>::NotEnoughBalance);
+
 		// Generate account from collection_id
 		let next_collection_serve_id = NextCollectionServeId::<T>::get(collection_id);
 		let escrow_account: <T as frame_system::Config>::AccountId =
 			<T as pallet::Config>::PalletId::get().into_sub_account(next_collection_serve_id);
+
+		<T as Config>::Currency::transfer(&who, &escrow_account, serve_deposit_balance, AllowDeath)?;
 
 		let serve_id = NextCollectionServeId::<T>::try_mutate(
 			collection_id,
@@ -282,9 +314,10 @@ impl<T: Config> Pallet<T> {
 
 		let serve_metadata = ServeMetadata{
 			serve_types,
-			serve_version: bounded_serve_version,
+			serve_ways,
 			serve_state,
 			serve_switch,
+			serve_version: bounded_serve_version,
 			serve_name: bounded_serve_name,
 			serve_description: bounded_serve_description,
 			serve_url: bounded_serve_url,
@@ -292,6 +325,7 @@ impl<T: Config> Pallet<T> {
 			server_limit_time,
 			server_limit_times
 		};
+
 
 		let new_serve = Serve{
 			escrow_account,
