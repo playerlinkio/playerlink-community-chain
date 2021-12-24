@@ -4,13 +4,12 @@ use crate::{
 	service,
 };
 use playerlink_runtime::Block;
-use sc_cli::{ChainSpec, RuntimeVersion, SubstrateCli};
+use sc_cli::{ChainSpec, Role, RuntimeVersion, SubstrateCli};
 use sc_service::PartialComponents;
 
 impl SubstrateCli for Cli {
-	// polkadotjs logo check
 	fn impl_name() -> String {
-		"PlayerLink Node".into()
+		"Substrate Node".into()
 	}
 
 	fn impl_version() -> String {
@@ -30,7 +29,7 @@ impl SubstrateCli for Cli {
 	}
 
 	fn copyright_start_year() -> i32 {
-		2017
+		2021
 	}
 
 	fn load_spec(&self, id: &str) -> Result<Box<dyn sc_service::ChainSpec>, String> {
@@ -112,7 +111,11 @@ pub fn run() -> sc_cli::Result<()> {
 		None => {
 			let runner = cli.create_runner(&cli.run)?;
 			runner.run_node_until_exit(|config| async move {
-				service::new_full(config).map_err(sc_cli::Error::Service)
+				match config.role {
+					Role::Light => service::new_light(config),
+					_ => service::new_full(config),
+				}
+				.map_err(sc_cli::Error::Service)
 			})
 		},
 	}
