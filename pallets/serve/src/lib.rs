@@ -15,6 +15,7 @@ pub type ServeId = u32;
 pub type Balance = u128;
 
 
+
 type BalanceOf<T> =
 <<T as pallet::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
@@ -57,6 +58,7 @@ pub enum ServeTypes {
 pub enum ServeWays {
 	RESTFUL,
 	GRAPHQL,
+	RPC,
 	OTHER,
 }
 
@@ -92,6 +94,9 @@ pub struct ServeMetadata<BoundedString> {
 	server_limit_time:Option<TimeTypes>,
 	server_limit_times:Option<u32>,
 }
+
+
+
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -142,6 +147,16 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
+	pub(super) type ServiceCertificate<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		(T::AccountId,CollectionId),
+		Blake2_128Concat,
+		ServeId,
+		Balance,
+	>;
+
+	#[pallet::storage]
 	#[pallet::getter(fn next_collection_serve_id)]
 	pub(super) type NextCollectionServeId<T: Config> =
 	StorageMap<_, Blake2_128Concat, CollectionId, ServeId, ValueQuery>;
@@ -156,6 +171,7 @@ pub mod pallet {
 	pub enum Event<T: Config> {
 		CollectionCreated(CollectionId, T::AccountId),
 		CollectionServeCreated(CollectionId, ServeId, T::AccountId),
+		ServiceCertificateCreated(T::AccountId,CollectionId, ServeId,Balance)
 	}
 
 	// Errors inform users that something went wrong.
@@ -180,6 +196,20 @@ pub mod pallet {
 			let who = ensure_signed(origin)?;
 
 			Self::do_registered_server_collection(&who)?;
+
+			Ok(().into())
+		}
+
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+		pub fn registered_use_server_certificate(
+			origin: OriginFor<T>,
+			collection_id:u32,
+			serve_id:u32,
+			use_serve_deposit:Balance,
+		) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+
+			Self::do_registered_use_server_certificate(&who,collection_id,serve_id,use_serve_deposit)?;
 
 			Ok(().into())
 		}
@@ -240,6 +270,8 @@ impl<T: Config> Pallet<T> {
 
 		// fees
 		let deposit = T::CreateCollectionDeposit::get();
+		let who_balance = <T as Config>::Currency::total_balance(&who);
+		ensure!(who_balance >= deposit,Error::<T>::NotEnoughBalance);
 		<T as Config>::Currency::transfer(who, &Self::account_id(), deposit, AllowDeath)?;
 
 
@@ -260,6 +292,37 @@ impl<T: Config> Pallet<T> {
 		Collections::<T>::insert(collection_id, collection);
 		Self::deposit_event(Event::CollectionCreated(collection_id, who.clone()));
 		Ok(collection_id)
+	}
+
+	pub fn do_registered_use_server_certificate(
+		who: &T::AccountId,
+		collection_id:u32,
+		serve_id:u32,
+		use_serve_deposit:Balance
+	) -> DispatchResult{
+
+		CollectionServe::<T>::get(collection_id,serve_id).ok_or(Error::<T>::CollectionFound)?;
+
+		// fees
+		let deposit= T::CreateCollectionDeposit::get();
+		let who_balance = <T as Config>::Currency::total_balance(&who);
+
+		let serve_deposit_balance = BalanceOf::<T>::try_from(use_serve_deposit).map_err(|_| "balance expect u128 type").unwrap();
+
+
+		ensure!(who_balance >= deposit,Error::<T>::NotEnoughBalance);
+		ensure!(who_balance >= serve_deposit_balance,Error::<T>::NotEnoughBalance);
+		<T as Config>::Currency::transfer(who, &Self::account_id(), deposit, AllowDeath)?;
+
+		let escrow_account = CollectionServe::<T>::get(collection_id,serve_id).unwrap().escrow_account;
+
+		<T as Config>::Currency::transfer(who, &escrow_account, serve_deposit_balance, AllowDeath)?;
+
+		ServiceCertificate::<T>::insert((who,collection_id),serve_id,use_serve_deposit);
+
+		Self::deposit_event(Event::ServiceCertificateCreated(who.clone(),collection_id, serve_id,use_serve_deposit));
+
+		Ok(())
 	}
 
 	pub fn do_add_serve(

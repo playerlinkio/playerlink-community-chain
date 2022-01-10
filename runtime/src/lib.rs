@@ -298,7 +298,8 @@ impl pallet_sudo::Config for Runtime {
 parameter_types! {
 	pub const MarketplacePalletId: PalletId = PalletId(*b"pl/serve");
 	pub const StringLimit: u32 = 50;
-	pub const CreateCollectionDeposit: Balance = PL;
+	/// 100 PL  create a serve store
+	pub const CreateCollectionDeposit: Balance = 100 * PL;
 }
 
 impl pallet_serve::Config for Runtime {
