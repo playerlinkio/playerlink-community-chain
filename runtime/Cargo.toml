@@ -53,6 +53,7 @@ pallet-transaction-payment-rpc-runtime-api = { git = 'https://github.com/parityt
 pallet-nicks = { git = 'https://github.com/paritytech/substrate', branch = "polkadot-v0.9.11", default-features = false }
 
 pallet-serve = { default-features = false, path = "../pallets/serve" }
+pallet-authentication = { default-features = false, path = "../pallets/authentication" }
 
 [build-dependencies]
 substrate-wasm-builder = { git = 'https://github.com/paritytech/substrate', branch = "polkadot-v0.9.11" }
@@ -81,6 +82,7 @@ std = [
     'pallet-randomness-collective-flip/std',
     'pallet-sudo/std',
     'pallet-serve/std',
+    'pallet-authentication/std',
     'pallet-timestamp/std',
     'pallet-transaction-payment-rpc-runtime-api/std',
     'pallet-transaction-payment/std',

@@ -6,6 +6,14 @@ use frame_system::{ensure_signed, pallet_prelude::OriginFor};
 // use primitives::Balance;
 use scale_info::TypeInfo;
 use sp_runtime::{traits::One, RuntimeDebug};
+// use sp_core::hexdisplay::HexDisplay;
+use frame_support::sp_runtime::app_crypto::TryFrom;
+use frame_support::sp_runtime::traits::{IdentifyAccount, Verify};
+use frame_support::sp_runtime::MultiSignature;
+use frame_support::sp_runtime::MultiSigner;
+// use sp_application_crypto::sr25519;
+use sp_application_crypto::sr25519::Public;
+use sp_application_crypto::sr25519::Signature;
 
 
 pub use pallet::*;
@@ -171,7 +179,8 @@ pub mod pallet {
 	pub enum Event<T: Config> {
 		CollectionCreated(CollectionId, T::AccountId),
 		CollectionServeCreated(CollectionId, ServeId, T::AccountId),
-		ServiceCertificateCreated(T::AccountId,CollectionId, ServeId,Balance)
+		ServiceCertificateCreated(T::AccountId,CollectionId, ServeId,Balance),
+		Test(bool),
 	}
 
 	// Errors inform users that something went wrong.
@@ -211,6 +220,28 @@ pub mod pallet {
 
 			Self::do_registered_use_server_certificate(&who,collection_id,serve_id,use_serve_deposit)?;
 
+			Ok(().into())
+		}
+
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+		pub fn check(
+			origin: OriginFor<T>,
+			signature:[u8;64],
+			message:[u8;64],
+			pubkey:[u8;32],
+		) -> DispatchResult {
+			let _who = ensure_signed(origin)?;
+
+			let public = sp_core::sr25519::Public::from_raw(pubkey);
+
+			// &hex::decode(signature.as_slice()).expect("Hex invalid")[..],
+			let result = Self::check_signed_valid(
+				public,
+				signature.as_ref(),
+				message.as_ref()
+			);
+
+			Self::deposit_event(Event::Test(result));
 			Ok(().into())
 		}
 
@@ -404,5 +435,11 @@ impl<T: Config> Pallet<T> {
 
 	}
 
+	fn check_signed_valid(public_id: Public, signature: &[u8], msg: &[u8]) -> bool {
+		let signature = Signature::try_from(signature).unwrap();
+		let multi_sig = MultiSignature::from(signature); // OK
+		let multi_signer = MultiSigner::from(public_id);
+		multi_sig.verify(msg, &multi_signer.into_account())
+	}
 
 }
