@@ -22,7 +22,8 @@ pub type CollectionId = u32;
 pub type ServeId = u32;
 pub type Balance = u128;
 
-
+#[cfg(test)]
+mod tests;
 
 type BalanceOf<T> =
 <<T as pallet::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
@@ -227,7 +228,7 @@ pub mod pallet {
 		pub fn check(
 			origin: OriginFor<T>,
 			signature:[u8;64],
-			message:[u8;64],
+			message:[u8;100],
 			pubkey:[u8;32],
 		) -> DispatchResult {
 			let _who = ensure_signed(origin)?;
