@@ -1,20 +1,16 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::{dispatch::{DispatchError, DispatchResult}, sp_runtime::traits::AccountIdConversion, traits::{Currency, ExistenceRequirement::AllowDeath, Get, ReservableCurrency}, BoundedVec, inherent::Vec, ensure};
+use frame_support::{dispatch::{DispatchError, DispatchResult}, sp_runtime::traits::AccountIdConversion, traits::{Currency, ExistenceRequirement::AllowDeath, Get, ReservableCurrency}, BoundedVec,  ensure};
 use frame_system::{ensure_signed, pallet_prelude::OriginFor};
 // use primitives::Balance;
 use scale_info::TypeInfo;
 use sp_runtime::{traits::One, RuntimeDebug};
-// use sp_core::hexdisplay::HexDisplay;
 use frame_support::sp_runtime::app_crypto::TryFrom;
-use frame_support::sp_runtime::traits::{IdentifyAccount, Verify};
+use frame_support::sp_runtime::traits::{ Verify};
 use frame_support::sp_runtime::MultiSignature;
-use frame_support::sp_runtime::MultiSigner;
-// use sp_application_crypto::sr25519;
-use sp_application_crypto::sr25519::Public;
 use sp_application_crypto::sr25519::Signature;
-
+use frame_support::inherent::Vec;
 
 pub use pallet::*;
 
@@ -112,6 +108,7 @@ pub mod pallet {
 	use super::*;
 	use frame_support::{pallet_prelude::*, PalletId};
 	use frame_system::pallet_prelude::BlockNumberFor;
+	use sp_core::crypto::AccountId32;
 
 
 	#[pallet::config]
@@ -211,6 +208,20 @@ pub mod pallet {
 		}
 
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+		pub fn check(
+			origin: OriginFor<T>,
+			address: AccountId32,
+			message: Vec<u8>,
+			signature: Signature
+		) -> DispatchResult {
+			let _who = ensure_signed(origin)?;
+			let multi_sig = MultiSignature::from(signature);
+			let result = multi_sig.verify(message.as_slice(), &address);
+			Self::deposit_event(Event::Test(result));
+			Ok(().into())
+		}
+
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
 		pub fn registered_use_server_certificate(
 			origin: OriginFor<T>,
 			collection_id:u32,
@@ -221,28 +232,6 @@ pub mod pallet {
 
 			Self::do_registered_use_server_certificate(&who,collection_id,serve_id,use_serve_deposit)?;
 
-			Ok(().into())
-		}
-
-		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
-		pub fn check(
-			origin: OriginFor<T>,
-			signature:[u8;64],
-			message:[u8;100],
-			pubkey:[u8;32],
-		) -> DispatchResult {
-			let _who = ensure_signed(origin)?;
-
-			let public = sp_core::sr25519::Public::from_raw(pubkey);
-
-			// &hex::decode(signature.as_slice()).expect("Hex invalid")[..],
-			let result = Self::check_signed_valid(
-				public,
-				signature.as_ref(),
-				message.as_ref()
-			);
-
-			Self::deposit_event(Event::Test(result));
 			Ok(().into())
 		}
 
@@ -428,19 +417,8 @@ impl<T: Config> Pallet<T> {
 			serve_metadata,
 			serve_deposit
 		};
-
 		CollectionServe::<T>::insert(collection_id, serve_id, new_serve);
-
 		Self::deposit_event(Event::CollectionServeCreated(collection_id, serve_id, who));
 		Ok(())
-
 	}
-
-	fn check_signed_valid(public_id: Public, signature: &[u8], msg: &[u8]) -> bool {
-		let signature = Signature::try_from(signature).unwrap();
-		let multi_sig = MultiSignature::from(signature); // OK
-		let multi_signer = MultiSigner::from(public_id);
-		multi_sig.verify(msg, &multi_signer.into_account())
-	}
-
 }
