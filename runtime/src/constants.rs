@@ -3,6 +3,7 @@ pub mod currency {
 
 	pub const PL: Balance = 1_000_000_000;
 	pub const WEI: Balance = 1;
+    // pub const UNITS: Balance = 1_000_000_000_000_000_000;
 	pub const KILOWEI: Balance = 1_000;
 	pub const MEGAWEI: Balance = 1_000_000;
 	pub const GIGAWEI: Balance = 1_000_000_000;
