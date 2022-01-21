@@ -1,7 +1,7 @@
 pub mod currency {
 	use crate::Balance;
 
-	pub const PL: Balance = 1_000_000_000;
+	pub const PL: Balance = 10_000_000_000;
 	pub const WEI: Balance = 1;
     // pub const UNITS: Balance = 1_000_000_000_000_000_000;
 	pub const KILOWEI: Balance = 1_000;
