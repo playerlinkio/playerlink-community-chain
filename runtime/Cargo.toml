@@ -19,6 +19,7 @@ hex-literal = { version = "0.3.1", optional = true }
 scale-info = { version = "1.0.0", default-features = false, features = ["derive"] }
 smallvec = "1.7.0"
 serde = { version = "1.0.119", optional = true,features = ["derive"] }
+static_assertions = "1.1.0"
 
 sp-api = { git = 'https://github.com/paritytech/substrate', branch = "polkadot-v0.9.11", default-features = false }
 sp-block-builder = { git = 'https://github.com/paritytech/substrate', branch = "polkadot-v0.9.11", default-features = false }
@@ -46,6 +47,7 @@ pallet-randomness-collective-flip = { git = 'https://github.com/paritytech/subst
 pallet-aura = { git = 'https://github.com/paritytech/substrate', branch = "polkadot-v0.9.11", default-features = false }
 pallet-balances = { git = 'https://github.com/paritytech/substrate', branch = "polkadot-v0.9.11", default-features = false }
 pallet-grandpa = { git = 'https://github.com/paritytech/substrate', branch = "polkadot-v0.9.11", default-features = false }
+pallet-multisig = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.11" }
 pallet-sudo = { git = 'https://github.com/paritytech/substrate', branch = "polkadot-v0.9.11", default-features = false }
 pallet-timestamp = { git = 'https://github.com/paritytech/substrate', branch = "polkadot-v0.9.11", default-features = false }
 pallet-transaction-payment = { git = 'https://github.com/paritytech/substrate', branch = "polkadot-v0.9.11", default-features = false }
@@ -54,6 +56,17 @@ pallet-nicks = { git = 'https://github.com/paritytech/substrate', branch = "polk
 
 pallet-serve = { default-features = false, path = "../pallets/serve" }
 pallet-authentication = { default-features = false, path = "../pallets/authentication" }
+
+# Governance
+pallet-bounties = { git = 'https://github.com/paritytech/substrate', branch = "polkadot-v0.9.11", default-features = false }
+pallet-collective = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.11", default-features = false }
+pallet-democracy = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.11", default-features = false }
+pallet-elections-phragmen = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.11", default-features = false }
+pallet-identity = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.11", default-features = false }
+pallet-membership = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.11" }
+pallet-scheduler = { git = 'https://github.com/paritytech/substrate', branch = "polkadot-v0.9.11", default-features = false }
+pallet-tips = { git = 'https://github.com/paritytech/substrate', branch = "polkadot-v0.9.11", default-features = false }
+pallet-treasury = { git = 'https://github.com/paritytech/substrate', branch = "polkadot-v0.9.11", default-features = false }
 
 [build-dependencies]
 substrate-wasm-builder = { git = 'https://github.com/paritytech/substrate', branch = "polkadot-v0.9.11" }
@@ -81,11 +94,21 @@ std = [
     'pallet-grandpa/std',
     'pallet-randomness-collective-flip/std',
     'pallet-sudo/std',
+    "pallet-multisig/std",
     'pallet-serve/std',
     'pallet-authentication/std',
     'pallet-timestamp/std',
     'pallet-transaction-payment-rpc-runtime-api/std',
     'pallet-transaction-payment/std',
+    "pallet-bounties/std",
+    "pallet-collective/std",
+    "pallet-democracy/std",
+    "pallet-elections-phragmen/std",
+    "pallet-identity/std",
+    "pallet-membership/std",
+    "pallet-scheduler/std",
+    "pallet-tips/std",
+    "pallet-treasury/std",
     'sp-api/std',
     'sp-block-builder/std',
     'sp-consensus-aura/std',
