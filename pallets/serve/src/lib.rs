@@ -1,7 +1,12 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::{dispatch::{DispatchError, DispatchResult}, sp_runtime::traits::AccountIdConversion, traits::{Currency, ExistenceRequirement::AllowDeath, Get, ReservableCurrency}, BoundedVec,  ensure};
+use frame_support::{
+	dispatch::{DispatchError, DispatchResult},
+	sp_runtime::traits::AccountIdConversion,
+	traits::{Currency, ExistenceRequirement::AllowDeath, Get, ReservableCurrency},
+	BoundedVec,
+	ensure};
 use frame_system::{ensure_signed, pallet_prelude::OriginFor};
 // use primitives::Balance;
 use scale_info::TypeInfo;
@@ -10,7 +15,10 @@ use frame_support::sp_runtime::app_crypto::TryFrom;
 use frame_support::sp_runtime::traits::{ Verify};
 use frame_support::sp_runtime::MultiSignature;
 use sp_application_crypto::sr25519::Signature;
-use frame_support::inherent::Vec;
+use sp_std::vec::Vec;
+
+use sp_core::crypto::AccountId32;
+
 
 pub use pallet::*;
 
@@ -24,6 +32,20 @@ mod tests;
 type BalanceOf<T> =
 <<T as pallet::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
+/// Certificate
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo)]
+pub struct Certificate {
+	account_id: Vec<u8>,
+	collection_id: Vec<u8>,
+	serve_id: Vec<u8>,
+}
+/// SignatureData
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo)]
+pub struct SignatureData{
+	address: AccountId32,
+	message:Certificate,
+	signature:Vec<u8>,
+}
 /// Serve Collection info
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
 pub struct Collection<AccountId> {
@@ -49,6 +71,7 @@ pub struct Serve<AccountId,BoundedString> {
 	/// registered deposit fees for the Local Sever
 	serve_deposit:Balance,
 }
+
 
 
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
@@ -108,9 +131,6 @@ pub mod pallet {
 	use super::*;
 	use frame_support::{pallet_prelude::*, PalletId};
 	use frame_system::pallet_prelude::BlockNumberFor;
-	use sp_core::crypto::AccountId32;
-
-
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
@@ -128,6 +148,7 @@ pub mod pallet {
 
 		type Currency: Currency<Self::AccountId> + ReservableCurrency<Self::AccountId>;
 	}
+
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
@@ -167,6 +188,24 @@ pub mod pallet {
 	pub(super) type NextCollectionServeId<T: Config> =
 	StorageMap<_, Blake2_128Concat, CollectionId, ServeId, ValueQuery>;
 
+	#[pallet::type_value]
+	pub(super) fn DefaultSignatureData() -> SignatureData {
+		let certificate = Certificate {
+			account_id: Default::default(),
+			collection_id: Default::default(),
+			serve_id: Default::default()
+		};
+		SignatureData {
+			address:Default::default(),
+			message:certificate,
+			signature:Default::default(),
+		}
+	}
+	#[pallet::storage]
+	#[pallet::getter(fn last_signature)]
+	pub(super) type LastSignature<T: Config> =
+	StorageMap<_, Blake2_128Concat, (Vec<u8>, Vec<u8>),SignatureData,ValueQuery,DefaultSignatureData>;
+
 	#[pallet::storage]
 	#[pallet::getter(fn next_collection_id)]
 	pub(super) type NextCollectionId<T: Config> = StorageValue<_, CollectionId, ValueQuery>;
@@ -187,7 +226,8 @@ pub mod pallet {
 		NoAvailableCollectionId,
 		CollectionFound,
 		BadMetadata,
-		NotEnoughBalance
+		NotEnoughBalance,
+		SignatureUsed,
 	}
 
 
@@ -212,11 +252,23 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			address: AccountId32,
 			message: Vec<u8>,
-			signature: Signature
+			signature: Vec<u8>
 		) -> DispatchResult {
 			let _who = ensure_signed(origin)?;
-			let multi_sig = MultiSignature::from(signature);
+			let u: &[u8;64] = <&[u8; 64]>::try_from(signature.as_slice()).unwrap();
+			let sign = Signature::from_raw(*u);
+			let multi_sig = MultiSignature::from(sign);
 			let result = multi_sig.verify(message.as_slice(), &address);
+			if result {
+				let certificate = Self::parse_json(message);
+				let signature_data= SignatureData{
+					address,
+					message:certificate.clone(),
+					signature:signature.clone(),
+				};
+				ensure!(signature!=LastSignature::<T>::get((certificate.collection_id.clone(),certificate.serve_id.clone())).signature,Error::<T>::SignatureUsed);
+				LastSignature::<T>::insert((certificate.collection_id,certificate.serve_id),signature_data);
+			}
 			Self::deposit_event(Event::Test(result));
 			Ok(().into())
 		}
@@ -280,6 +332,22 @@ pub mod pallet {
 }
 
 impl<T: Config> Pallet<T> {
+	pub fn parse_json(message:Vec<u8>) -> Certificate {
+		let mut flag: Vec<u8> = Vec::new();
+		for x in 0..message.len() {
+			if let Some(44) = message.get(x) {
+				flag.push(x as u8);
+			}
+		}
+		let account_id = message[15..(*flag.get(0).unwrap() as usize - 1)].to_vec();
+		let collection_id = message[*flag.get(0).unwrap() as usize + 18..(*flag.get(1).unwrap() as usize - 1)].to_vec();
+		let serve_id = message[*flag.get(1).unwrap() as usize + 13..message.len() - 2].to_vec();
+		return Certificate {
+			account_id,
+			collection_id,
+			serve_id,
+		};
+	}
 	// The account ID of the vault
 	fn account_id() -> T::AccountId {
 		<T as Config>::PalletId::get().into_account()
