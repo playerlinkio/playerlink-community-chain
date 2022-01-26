@@ -30,7 +30,7 @@ use sp_version::RuntimeVersion;
 // A few exports that help ease life for downstream crates.
 pub use frame_support::{
 	construct_runtime, parameter_types,
-	traits::{KeyOwnerProofSystem, LockIdentifier, Randomness, StorageInfo},
+	traits::{KeyOwnerProofSystem, LockIdentifier, Randomness, StorageInfo,ConstU32},
 	weights::{
 		constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight, WEIGHT_PER_SECOND},
 		IdentityFee, Weight,
@@ -38,9 +38,11 @@ pub use frame_support::{
 	PalletId, StorageValue,
 };
 use frame_system::{EnsureOneOf, EnsureRoot};
+// use pallet_atomic_swap::BalanceSwapAction;
 pub use pallet_balances::Call as BalancesCall;
 pub use pallet_timestamp::Call as TimestampCall;
 use pallet_transaction_payment::{CurrencyAdapter, Multiplier, MultiplierUpdate};
+use sp_core::crypto::AccountId32;
 use sp_runtime::traits::Convert;
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
@@ -570,6 +572,8 @@ parameter_types! {
 	pub const CreateCollectionDeposit: Balance = 100 * PL;
 }
 
+
+
 impl pallet_serve::Config for Runtime {
 	type Event = Event;
 	type StringLimit = StringLimit;
@@ -581,6 +585,13 @@ impl pallet_serve::Config for Runtime {
 impl pallet_authentication::Config for Runtime {
 	type Event = Event;
 	type WeightInfo = ();
+}
+
+impl pallet_atomic_swap::Config for Runtime {
+	type Event = Event;
+	type SwapAction = pallet_atomic_swap::BalanceSwapAction<AccountId32, Balances>;
+	type ProofLimit = ConstU32<1024>;
+
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -613,6 +624,9 @@ construct_runtime!(
 		Identity: pallet_identity::{Pallet, Call, Storage, Event<T>} = 37,
 		Bounties: pallet_bounties::{Pallet, Call, Storage, Event<T>} = 38,
 		Tips: pallet_tips::{Pallet, Call, Storage, Event<T>} = 39,
+
+		// Function
+		AtomicSwap:pallet_atomic_swap::{Pallet, Call, Storage, Event<T>},
 	}
 );
 

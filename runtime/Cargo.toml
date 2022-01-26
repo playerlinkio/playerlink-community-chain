@@ -68,6 +68,9 @@ pallet-scheduler = { git = 'https://github.com/paritytech/substrate', branch = "
 pallet-tips = { git = 'https://github.com/paritytech/substrate', branch = "polkadot-v0.9.11", default-features = false }
 pallet-treasury = { git = 'https://github.com/paritytech/substrate', branch = "polkadot-v0.9.11", default-features = false }
 
+#Function
+pallet-atomic-swap = { git = 'https://github.com/paritytech/substrate', branch = "polkadot-v0.9.11", default-features = false }
+
 [build-dependencies]
 substrate-wasm-builder = { git = 'https://github.com/paritytech/substrate', branch = "polkadot-v0.9.11" }
 [features]
