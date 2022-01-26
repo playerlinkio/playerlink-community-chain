@@ -332,6 +332,20 @@ pub mod pallet {
 
 			Ok(().into())
 		}
+
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+		pub fn remove_serve(
+			origin: OriginFor<T>,
+			collection_id: u32,
+			serve_id: u32,
+		) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+			// Collections::<T>::get(collection_id).ok_or(Error::<T>::CollectionFound)?;
+			// who: T::AccountId, collection_id: u32, serve_id: u32
+			Self::do_remove_serve(who, collection_id, serve_id)?;
+
+			Ok(().into())
+		}
 	}
 }
 
