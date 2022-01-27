@@ -14,6 +14,7 @@ use sp_runtime::{traits::One, RuntimeDebug};
 use frame_support::sp_runtime::app_crypto::TryFrom;
 use frame_support::sp_runtime::traits::{ Verify};
 use frame_support::sp_runtime::MultiSignature;
+use frame_support::log;
 use sp_application_crypto::sr25519::Signature;
 use sp_std::vec::Vec;
 
@@ -21,6 +22,7 @@ use sp_core::crypto::AccountId32;
 
 
 pub use pallet::*;
+use crate::Error::CollectionNotFound;
 
 pub type CollectionId = u32;
 pub type ServeId = u32;
@@ -180,7 +182,7 @@ pub mod pallet {
 		(T::AccountId,CollectionId),
 		Blake2_128Concat,
 		ServeId,
-		Balance,
+		BalanceOf<T>,
 	>;
 
 	#[pallet::storage]
@@ -224,10 +226,12 @@ pub mod pallet {
 	#[pallet::error]
 	pub enum Error<T> {
 		NoAvailableCollectionId,
-		CollectionFound,
+		CollectionNotFound,
 		BadMetadata,
 		NotEnoughBalance,
 		SignatureUsed,
+		ServeNumberOverflow,
+		NotEnoughBalanceForRegisteredServerCertificate
 	}
 
 
@@ -278,12 +282,9 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			collection_id:u32,
 			serve_id:u32,
-			use_serve_deposit:Balance,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-
-			Self::do_registered_use_server_certificate(&who,collection_id,serve_id,use_serve_deposit)?;
-
+			Self::do_registered_use_server_certificate(&who,collection_id,serve_id)?;
 			Ok(().into())
 		}
 
@@ -305,7 +306,7 @@ pub mod pallet {
 			serve_deposit:Balance
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			Collections::<T>::get(collection_id).ok_or(Error::<T>::CollectionFound)?;
+			Collections::<T>::get(collection_id).ok_or(Error::<T>::CollectionNotFound)?;
 
 			Self::do_add_serve(
 				who,
@@ -387,31 +388,23 @@ impl<T: Config> Pallet<T> {
 		who: &T::AccountId,
 		collection_id:u32,
 		serve_id:u32,
-		use_serve_deposit:Balance
 	) -> DispatchResult{
-
-		CollectionServe::<T>::get(collection_id,serve_id).ok_or(Error::<T>::CollectionFound)?;
-
-		// fees
-		let deposit= T::CreateCollectionDeposit::get();
-		let who_balance = <T as Config>::Currency::total_balance(&who);
-
-		let serve_deposit_balance = BalanceOf::<T>::try_from(use_serve_deposit).map_err(|_| "balance expect u128 type").unwrap();
-
-
-		ensure!(who_balance >= deposit,Error::<T>::NotEnoughBalance);
-		ensure!(who_balance >= serve_deposit_balance,Error::<T>::NotEnoughBalance);
-		<T as Config>::Currency::transfer(who, &Self::account_id(), deposit, AllowDeath)?;
-
-		let escrow_account = CollectionServe::<T>::get(collection_id,serve_id).unwrap().escrow_account;
-
-		<T as Config>::Currency::transfer(who, &escrow_account, serve_deposit_balance, AllowDeath)?;
-
-		ServiceCertificate::<T>::insert((who,collection_id),serve_id,use_serve_deposit);
-
-		Self::deposit_event(Event::ServiceCertificateCreated(who.clone(),collection_id, serve_id,use_serve_deposit));
-
-		Ok(())
+		CollectionServe::<T>::get(collection_id,serve_id).ok_or(Error::<T>::CollectionNotFound)?;
+		// reserve
+		let reserve_value = BalanceOf::<T>::try_from(50_000_000_000_000 as u128).map_err(|_| "balance expect u128 type").unwrap();
+		T::Currency::reserve(who, reserve_value)
+			.map_err(|_| Error::<T>::NotEnoughBalanceForRegisteredServerCertificate)?;
+		ServiceCertificate::<T>::insert((who,collection_id),serve_id,reserve_value);
+		Self::deposit_event(Event::ServiceCertificateCreated(who.clone(),collection_id, serve_id,50_000_000_000_000_000_000));
+		Collections::<T>::mutate(collection_id,|collection|{
+			let collection = collection.as_mut().ok_or(Error::<T>::CollectionNotFound)?;
+			collection.registered_serve_number_all = collection.registered_serve_number_all.checked_add(1).ok_or(Error::<T>::ServeNumberOverflow)?;
+			CollectionServe::<T>::mutate(collection_id, serve_id, |serve|{
+				let serve = serve.as_mut().ok_or(Error::<T>::CollectionNotFound)?;
+				serve.registered_serve_number = serve.registered_serve_number.checked_add(1).ok_or(Error::<T>::ServeNumberOverflow)?;
+				Ok(())
+			})
+		})
 	}
 
 	pub fn do_add_serve(
@@ -486,7 +479,15 @@ impl<T: Config> Pallet<T> {
 			serve_deposit
 		};
 		CollectionServe::<T>::insert(collection_id, serve_id, new_serve);
-		Self::deposit_event(Event::CollectionServeCreated(collection_id, serve_id, who));
-		Ok(())
+		Collections::<T>::mutate(collection_id,|collection|{
+			if let Some(ref mut c) = collection {
+				c.serve_number = c.serve_number.checked_add(1).ok_or(Error::<T>::ServeNumberOverflow)?;
+				log::debug!(target: "serve", "Collections = {:?}", c);
+			}
+
+			Self::deposit_event(Event::CollectionServeCreated(collection_id, serve_id, who));
+			Ok(())
+		})
+
 	}
 }
