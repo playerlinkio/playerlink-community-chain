@@ -10,7 +10,10 @@ use frame_support::{
 };
 use frame_system::{ensure_signed, pallet_prelude::OriginFor};
 // use primitives::Balance;
-use frame_support::sp_runtime::{app_crypto::TryFrom, traits::Verify, MultiSignature};
+use frame_support::{
+	sp_runtime::{app_crypto::TryFrom, traits::Verify, MultiSignature},
+	traits::LockableCurrency,
+};
 use scale_info::TypeInfo;
 use sp_application_crypto::sr25519::Signature;
 use sp_runtime::{traits::One, RuntimeDebug};
@@ -331,19 +334,19 @@ pub mod pallet {
 			Ok(().into())
 		}
 		// TODO add remove serve
-		// #[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
-		// pub fn remove_serve(
-		// 	origin: OriginFor<T>,
-		// 	collection_id: u32,
-		// 	serve_id: u32,
-		// ) -> DispatchResult {
-		// 	let who = ensure_signed(origin)?;
-		// 	// Collections::<T>::get(collection_id).ok_or(Error::<T>::CollectionFound)?;
-		// 	// who: T::AccountId, collection_id: u32, serve_id: u32
-		// 	Self::do_remove_serve(who, collection_id, serve_id)?;
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+		pub fn remove_serve(
+			origin: OriginFor<T>,
+			collection_id: u32,
+			serve_id: u32,
+		) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+			// Collections::<T>::get(collection_id).ok_or(Error::<T>::CollectionFound)?;
+			// who: T::AccountId, collection_id: u32, serve_id: u32
+			Self::do_remove_serve(who, collection_id, serve_id);
 
-		// 	Ok(().into())
-		// }
+			Ok(().into())
+		}
 	}
 }
 
@@ -508,15 +511,19 @@ impl<T: Config> Pallet<T> {
 		Ok(())
 	}
 
-	// pub fn do_remove_serve(who: T::AccountId, collection_id: u32, serve_id: u32) {
-	// 	let Serve { serve_deposit, .. } = <CollectionServe<T>>::take(collection_id, serve_id);
+	pub fn do_remove_serve(who: T::AccountId, collection_id: u32, serve_id: u32) {
+		let Serve { serve_deposit, escrow_account, .. } =
+			<CollectionServe<T>>::take(collection_id, serve_id).unwrap();
+		let serve_deposit_balance = BalanceOf::<T>::try_from(serve_deposit)
+			.map_err(|_| "balance expect u128 type")
+			.unwrap();
+		<T as Config>::Currency::transfer(&escrow_account, &who, serve_deposit_balance, AllowDeath);
+		// remove storage, lock and unreserve.
+		// T::Currency::remove_lock(T::PalletId::get(), who);
 
-	// remove storage, lock and unreserve.
-	// T::Currency::remove_lock(T::PalletId::get(), who);
-
-	// NOTE: we could check the deposit amount before removing and skip if zero, but it will be
-	// a noop anyhow.
-	// let _remainder = T::Currency::unreserve(who, serve_deposit);
-	// debug_assert!(_remainder.is_zero());
-	// }
+		// NOTE: we could check the deposit amount before removing and skip if zero, but it will be
+		// a noop anyhow.
+		// let _remainder = T::Currency::unreserve(who, serve_deposit);
+		// debug_assert!(_remainder.is_zero());
+	}
 }
