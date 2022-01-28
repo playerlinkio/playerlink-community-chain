@@ -135,7 +135,10 @@ pub mod pallet {
 		#[pallet::constant]
 		type CreateCollectionDeposit: Get<BalanceOf<Self>>;
 
-		type Currency: Currency<Self::AccountId> + ReservableCurrency<Self::AccountId>;
+		// type Currency: Currency<Self::AccountId> + ReservableCurrency<Self::AccountId>;
+		/// The currency that people are electing with.
+		type Currency: LockableCurrency<Self::AccountId, Moment = Self::BlockNumber>
+			+ ReservableCurrency<Self::AccountId>;
 	}
 
 	#[pallet::pallet]
