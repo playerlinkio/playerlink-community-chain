@@ -39,6 +39,7 @@ pub struct Certificate {
 	account_id: Vec<u8>,
 	collection_id: Vec<u8>,
 	serve_id: Vec<u8>,
+	times: Vec<u8>,
 }
 /// SignatureData
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo)]
@@ -183,6 +184,7 @@ pub mod pallet {
 			account_id: Default::default(),
 			collection_id: Default::default(),
 			serve_id: Default::default(),
+			times: Default::default(),
 		};
 		SignatureData {
 			address: Default::default(),
@@ -261,7 +263,7 @@ pub mod pallet {
 					signature !=
 						LastSignature::<T>::get((
 							certificate.collection_id.clone(),
-							certificate.serve_id.clone()
+							certificate.serve_id.clone(),
 						))
 						.signature,
 					Error::<T>::SignatureUsed
@@ -363,7 +365,8 @@ impl<T: Config> Pallet<T> {
 			[*flag.get(0).unwrap() as usize + 18..(*flag.get(1).unwrap() as usize - 1)]
 			.to_vec();
 		let serve_id = message[*flag.get(1).unwrap() as usize + 13..message.len() - 2].to_vec();
-		return Certificate { account_id, collection_id, serve_id }
+		let times = message[*flag.get(1).unwrap() as usize + 13..message.len() - 3].to_vec();
+		return Certificate { account_id, collection_id, serve_id, times }
 	}
 	// The account ID of the vault
 	fn account_id() -> T::AccountId {
@@ -410,7 +413,7 @@ impl<T: Config> Pallet<T> {
 		let deposit = T::CreateCollectionDeposit::get();
 		let who_balance = <T as Config>::Currency::total_balance(&who);
 
-		let serve_deposit_balance = BalanceOf::<T>::try_from(use_serve_deposit)
+		let serve_deposit_balance = BalanceOf::<T>::try_from(use_serve_deposit as u8)
 			.map_err(|_| "balance expect u128 type")
 			.unwrap();
 
@@ -452,7 +455,7 @@ impl<T: Config> Pallet<T> {
 		serve_deposit: Balance,
 	) -> DispatchResult {
 		let who_balance = <T as Config>::Currency::total_balance(&who);
-		let serve_deposit_balance = BalanceOf::<T>::try_from(serve_deposit)
+		let serve_deposit_balance = BalanceOf::<T>::try_from(serve_deposit as u8)
 			.map_err(|_| "balance expect u128 type")
 			.unwrap();
 		ensure!(who_balance >= serve_deposit_balance, Error::<T>::NotEnoughBalance);
@@ -514,7 +517,7 @@ impl<T: Config> Pallet<T> {
 	pub fn do_remove_serve(who: T::AccountId, collection_id: u32, serve_id: u32) {
 		let Serve { serve_deposit, escrow_account, .. } =
 			<CollectionServe<T>>::take(collection_id, serve_id).unwrap();
-		let serve_deposit_balance = BalanceOf::<T>::try_from(serve_deposit)
+		let serve_deposit_balance = BalanceOf::<T>::try_from(serve_deposit as u8)
 			.map_err(|_| "balance expect u128 type")
 			.unwrap();
 		<T as Config>::Currency::transfer(&escrow_account, &who, serve_deposit_balance, AllowDeath);
