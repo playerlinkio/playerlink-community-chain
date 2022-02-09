@@ -220,10 +220,12 @@ pub mod pallet {
 	#[pallet::error]
 	pub enum Error<T> {
 		NoAvailableCollectionId,
-		CollectionFound,
+		CollectionNotFound,
 		BadMetadata,
 		NotEnoughBalance,
 		SignatureUsed,
+		ServeNumberOverflow,
+		NotEnoughBalanceForRegisteredServerCertificate
 	}
 
 	#[pallet::hooks]
@@ -314,7 +316,7 @@ pub mod pallet {
 			serve_deposit: Balance,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			Collections::<T>::get(collection_id).ok_or(Error::<T>::CollectionFound)?;
+			Collections::<T>::get(collection_id).ok_or(Error::<T>::CollectionNotFound)?;
 
 			Self::do_add_serve(
 				who,
@@ -343,7 +345,7 @@ pub mod pallet {
 			serve_id: u32,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			// Collections::<T>::get(collection_id).ok_or(Error::<T>::CollectionFound)?;
+			// Collections::<T>::get(collection_id).ok_or(Error::<T>::CollectionNotFound)?;
 			// who: T::AccountId, collection_id: u32, serve_id: u32
 			Self::do_remove_serve(who, collection_id, serve_id);
 
@@ -407,7 +409,7 @@ impl<T: Config> Pallet<T> {
 		serve_id: u32,
 		use_serve_deposit: Balance,
 	) -> DispatchResult {
-		CollectionServe::<T>::get(collection_id, serve_id).ok_or(Error::<T>::CollectionFound)?;
+		CollectionServe::<T>::get(collection_id, serve_id).ok_or(Error::<T>::CollectionNotFound)?;
 
 		// fees
 		let deposit = T::CreateCollectionDeposit::get();
@@ -510,8 +512,14 @@ impl<T: Config> Pallet<T> {
 		let new_serve =
 			Serve { escrow_account, registered_serve_number: 0, serve_metadata, serve_deposit };
 		CollectionServe::<T>::insert(collection_id, serve_id, new_serve);
-		Self::deposit_event(Event::CollectionServeCreated(collection_id, serve_id, who));
-		Ok(())
+		Collections::<T>::mutate(collection_id,|collection|{
+			if let Some(ref mut c) = collection {
+				c.serve_number = c.serve_number.checked_add(1).ok_or(Error::<T>::ServeNumberOverflow)?;
+			}
+
+			Self::deposit_event(Event::CollectionServeCreated(collection_id, serve_id, who));
+			Ok(())
+		})
 	}
 
 	pub fn do_remove_serve(who: T::AccountId, collection_id: u32, serve_id: u32) {
