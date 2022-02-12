@@ -5,8 +5,9 @@ use frame_support::{
 	dispatch::{DispatchError, DispatchResult},
 	ensure,
 	sp_runtime::traits::AccountIdConversion,
-	traits::{Currency, ExistenceRequirement::AllowDeath, Get, ReservableCurrency},
+	traits::{Currency, ExistenceRequirement, Get, ReservableCurrency},
 	BoundedVec,
+	transactional,
 };
 use frame_system::{ensure_signed, pallet_prelude::OriginFor};
 // use primitives::Balance;
@@ -25,7 +26,6 @@ pub use pallet::*;
 
 pub type CollectionId = u32;
 pub type ServeId = u32;
-pub type Balance = u128;
 
 #[cfg(test)]
 mod tests;
@@ -35,17 +35,17 @@ type BalanceOf<T> =
 
 /// Certificate
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo)]
-pub struct Certificate {
-	account_id: Vec<u8>,
-	collection_id: Vec<u8>,
-	serve_id: Vec<u8>,
-	times: Vec<u8>,
+pub struct Certificate<AccountId> {
+	pub account_id: AccountId,
+	pub collection_id: CollectionId,
+	pub serve_id: ServeId,
+	pub times: u32,
 }
 /// SignatureData
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo)]
-pub struct SignatureData {
+pub struct SignatureData<AccountId> {
 	address: AccountId32,
-	message: Certificate,
+	message: Certificate<AccountId>,
 	signature: Vec<u8>,
 }
 /// Serve Collection info
@@ -54,23 +54,35 @@ pub struct Collection<AccountId> {
 	/// Collection owner
 	pub serve_builder: AccountId,
 	/// all registered serve number
-	pub serve_number: u8,
+	pub serve_number: u32,
 	/// all registered serve user number
 	pub registered_serve_number_all: u32,
-	/// all registered deposit fees for the Severs
-	pub serve_deposit_all: Balance,
+}
+
+/// Collection Serve
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo)]
+pub struct ServeMetadata<Balance> {
+	serve_types: ServeTypes,
+	serve_ways: ServeWays,
+	serve_state: ServeState,
+	serve_switch: bool,
+	serve_version: Vec<u8>,
+	serve_name: Vec<u8>,
+	serve_description: Vec<u8>,
+	serve_url: Vec<u8>,
+	serve_price: Balance,
+	server_limit_time: Option<TimeTypes>,
+	server_limit_times: Option<u32>,
 }
 
 /// Serve
-#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
-pub struct Serve<AccountId, BoundedString> {
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo)]
+pub struct Serve<AccountId,Balance> {
 	/// storage deposit fess
 	escrow_account: AccountId,
 	/// local serve user number
 	registered_serve_number: u32,
-	serve_metadata: ServeMetadata<BoundedString>,
-	/// registered deposit fees for the Local Sever
-	serve_deposit: Balance,
+	serve_metadata: ServeMetadata<Balance>,
 }
 
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
@@ -103,22 +115,6 @@ pub enum ServeState {
 	Prd,
 }
 
-/// Collection Serve
-#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
-pub struct ServeMetadata<BoundedString> {
-	serve_types: ServeTypes,
-	serve_ways: ServeWays,
-	serve_state: ServeState,
-	serve_switch: bool,
-	serve_version: BoundedString,
-	serve_name: BoundedString,
-	serve_description: BoundedString,
-	serve_url: BoundedString,
-	serve_price: Balance,
-	server_limit_time: Option<TimeTypes>,
-	server_limit_times: Option<u32>,
-}
-
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
@@ -137,7 +133,11 @@ pub mod pallet {
 
 		/// The minimum balance to create collection
 		#[pallet::constant]
-		type CreateCollectionDeposit: Get<BalanceOf<Self>>;
+		type CreateCollectionMinBalance: Get<BalanceOf<Self>>;
+
+		/// The minimum balance to create collection
+		#[pallet::constant]
+		type CreateServeMinBalance: Get<BalanceOf<Self>>;
 
 		// type Currency: Currency<Self::AccountId> + ReservableCurrency<Self::AccountId>;
 		/// The currency that people are electing with.
@@ -160,7 +160,16 @@ pub mod pallet {
 		CollectionId,
 		Blake2_128Concat,
 		ServeId,
-		Serve<T::AccountId, BoundedVec<u8, <T as pallet::Config>::StringLimit>>,
+		Serve<T::AccountId,BalanceOf<T>>,
+	>;
+	#[pallet::storage]
+	pub(super) type UseServeEscrowAccount<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		(T::AccountId,CollectionId),
+		Blake2_128Concat,
+		ServeId,
+		T::AccountId,
 	>;
 
 	#[pallet::storage]
@@ -170,7 +179,7 @@ pub mod pallet {
 		(T::AccountId, CollectionId),
 		Blake2_128Concat,
 		ServeId,
-		Certificate,
+		Certificate<T::AccountId>,
 	>;
 
 	#[pallet::storage]
@@ -178,29 +187,13 @@ pub mod pallet {
 	pub(super) type NextCollectionServeId<T: Config> =
 		StorageMap<_, Blake2_128Concat, CollectionId, ServeId, ValueQuery>;
 
-	#[pallet::type_value]
-	pub(super) fn DefaultSignatureData() -> SignatureData {
-		let certificate = Certificate {
-			account_id: Default::default(),
-			collection_id: Default::default(),
-			serve_id: Default::default(),
-			times: Default::default(),
-		};
-		SignatureData {
-			address: Default::default(),
-			message: certificate,
-			signature: Default::default(),
-		}
-	}
 	#[pallet::storage]
 	#[pallet::getter(fn last_signature)]
 	pub(super) type LastSignature<T: Config> = StorageMap<
 		_,
 		Blake2_128Concat,
-		(Vec<u8>, Vec<u8>),
-		SignatureData,
-		ValueQuery,
-		DefaultSignatureData,
+		(CollectionId,ServeId),
+		SignatureData<T::AccountId>,
 	>;
 
 	#[pallet::storage]
@@ -212,7 +205,7 @@ pub mod pallet {
 	pub enum Event<T: Config> {
 		CollectionCreated(CollectionId, T::AccountId),
 		CollectionServeCreated(CollectionId, ServeId, T::AccountId),
-		ServiceCertificateCreated(T::AccountId, CollectionId, ServeId, Certificate),
+		ServiceCertificateCreated(T::AccountId, CollectionId, ServeId, Certificate<T::AccountId>),
 		Test(bool),
 	}
 
@@ -227,7 +220,8 @@ pub mod pallet {
 		ServeNumberOverflow,
 		NotEnoughBalanceForRegisteredServerCertificate,
 		UseServeDepositTooSmall,
-
+		ServiceCertificateNotFound,
+		NoPermission,
 	}
 
 	#[pallet::hooks]
@@ -239,68 +233,24 @@ pub mod pallet {
 		pub fn registered_server_collection(origin: OriginFor<T>) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
-			Self::do_registered_server_collection(&who)?;
+			let min_balance = T::CreateCollectionMinBalance::get();
+			T::Currency::reserve(&who, min_balance).map_err(|_| Error::<T>::NotEnoughBalance)?;
+			let collection_id = NextCollectionId::<T>::get();
+			NextCollectionId::<T>::mutate(|old_collection_id| {
+				*old_collection_id = collection_id.saturating_add(1);
+			});
+			let collection = Collection {
+				serve_builder: who.clone(),
+				serve_number: 0,
+				registered_serve_number_all: 0,
+			};
 
-			Ok(().into())
+			Collections::<T>::insert(collection_id, collection);
+			Self::deposit_event(Event::CollectionCreated(collection_id, who));
+			Ok(())
 		}
-
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
-		pub fn check(
-			origin: OriginFor<T>,
-			address: AccountId32,
-			message: Vec<u8>,
-			signature: Vec<u8>,
-		) -> DispatchResult {
-			let _who = ensure_signed(origin)?;
-			let u: &[u8; 64] = <&[u8; 64]>::try_from(signature.as_slice()).unwrap();
-			let sign = Signature::from_raw(*u);
-			let multi_sig = MultiSignature::from(sign);
-			let result = multi_sig.verify(message.as_slice(), &address);
-			if result {
-				let certificate = Self::parse_json(message);
-				let signature_data = SignatureData {
-					address,
-					message: certificate.clone(),
-					signature: signature.clone(),
-				};
-				ensure!(
-					signature !=
-						LastSignature::<T>::get((
-							certificate.collection_id.clone(),
-							certificate.serve_id.clone(),
-						))
-						.signature,
-					Error::<T>::SignatureUsed
-				);
-				LastSignature::<T>::insert(
-					(certificate.collection_id, certificate.serve_id),
-					signature_data,
-				);
-			}
-			Self::deposit_event(Event::Test(result));
-			Ok(().into())
-		}
-
-		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
-		pub fn registered_use_server_certificate(
-			origin: OriginFor<T>,
-			collection_id: u32,
-			serve_id: u32,
-			use_serve_deposit: Balance,
-		) -> DispatchResult {
-			let who = ensure_signed(origin)?;
-
-			Self::do_registered_use_server_certificate(
-				&who,
-				collection_id,
-				serve_id,
-				use_serve_deposit,
-			)?;
-
-			Ok(().into())
-		}
-
-		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+		#[transactional]
 		pub fn add_serve(
 			origin: OriginFor<T>,
 			collection_id: u32,
@@ -312,17 +262,25 @@ pub mod pallet {
 			serve_name: Vec<u8>,
 			serve_description: Vec<u8>,
 			serve_url: Vec<u8>,
-			serve_price: Balance,
+			serve_price: BalanceOf<T>,
 			server_limit_time: Option<TimeTypes>,
-			server_limit_times: Option<u32>,
-			serve_deposit: Balance,
+			server_limit_times: Option<u32>
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			Collections::<T>::get(collection_id).ok_or(Error::<T>::CollectionNotFound)?;
+			let collection = Collections::<T>::get(collection_id).ok_or(Error::<T>::CollectionNotFound)?;
+			ensure!(collection.serve_builder==who,Error::<T>::NoPermission);
 
-			Self::do_add_serve(
-				who,
-				collection_id,
+			let min_balance = T::CreateServeMinBalance::get();
+			T::Currency::reserve(&who, min_balance).map_err(|_| Error::<T>::NotEnoughBalance)?;
+
+			let collection_serve_id = NextCollectionServeId::<T>::get(collection_id);
+			let escrow_account: <T as frame_system::Config>::AccountId =
+				<T as pallet::Config>::PalletId::get().into_sub_account(collection_serve_id);
+
+			NextCollectionServeId::<T>::mutate(collection_id,|old_collection_serve_id| {
+				*old_collection_serve_id = old_collection_serve_id.saturating_add(1);
+			});
+			let serve_metadata = ServeMetadata {
 				serve_types,
 				serve_ways,
 				serve_state,
@@ -334,211 +292,127 @@ pub mod pallet {
 				serve_price,
 				server_limit_time,
 				server_limit_times,
-				serve_deposit,
-			)?;
+			};
 
-			Ok(().into())
+			let new_serve = Serve { escrow_account, registered_serve_number: 0, serve_metadata};
+			CollectionServe::<T>::insert(collection_id, collection_serve_id, new_serve);
+
+			Collections::<T>::mutate(collection_id,|collection|{
+				if let Some(ref mut c) = collection {
+					c.serve_number = c.serve_number.checked_add(1).ok_or(Error::<T>::ServeNumberOverflow)?;
+				}
+				Self::deposit_event(Event::CollectionServeCreated(collection_id, collection_serve_id, who));
+				Ok(())
+			})
 		}
-		// TODO add remove serve
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
-		pub fn remove_serve(
+		#[transactional]
+		pub fn registered_use_server_certificate(
 			origin: OriginFor<T>,
 			collection_id: u32,
 			serve_id: u32,
+			use_serve_deposit: BalanceOf<T>,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			// Collections::<T>::get(collection_id).ok_or(Error::<T>::CollectionNotFound)?;
-			// who: T::AccountId, collection_id: u32, serve_id: u32
-			Self::do_remove_serve(who, collection_id, serve_id);
 
-			Ok(().into())
+			CollectionServe::<T>::get(collection_id, serve_id).ok_or(Error::<T>::CollectionNotFound)?;
+			let escrow_account: <T as frame_system::Config>::AccountId = Self::account_id();
+			<T as Config>::Currency::transfer(&who,&escrow_account, use_serve_deposit,ExistenceRequirement::KeepAlive)?;
+
+			UseServeEscrowAccount::<T>::insert((who.clone(), collection_id), serve_id,escrow_account);
+
+			let certificate = Certificate{
+				account_id: who.clone(),
+				collection_id,
+				serve_id,
+				times: 0,
+			};
+			ServiceCertificate::<T>::insert((who.clone(), collection_id), serve_id, certificate.clone());
+
+			Self::deposit_event(Event::ServiceCertificateCreated(
+				who,
+				collection_id,
+				serve_id,
+				certificate,
+			));
+			Collections::<T>::mutate(collection_id,|collection|{
+				let collection = collection.as_mut().ok_or(Error::<T>::CollectionNotFound)?;
+				collection.registered_serve_number_all = collection.registered_serve_number_all.checked_add(1).ok_or(Error::<T>::ServeNumberOverflow)?;
+				CollectionServe::<T>::mutate(collection_id, serve_id, |serve|{
+					let serve = serve.as_mut().ok_or(Error::<T>::CollectionNotFound)?;
+					serve.registered_serve_number = serve.registered_serve_number.checked_add(1).ok_or(Error::<T>::ServeNumberOverflow)?;
+					Ok(())
+				})
+			})
 		}
+		// #[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+		// pub fn check(
+		// 	origin: OriginFor<T>,
+		// 	address: AccountId32,
+		// 	message: Vec<u8>,
+		// 	signature: Vec<u8>,
+		// ) -> DispatchResult {
+		// 	let _who = ensure_signed(origin)?;
+		// 	let u: &[u8; 64] = <&[u8; 64]>::try_from(signature.as_slice()).unwrap();
+		// 	let sign = Signature::from_raw(*u);
+		// 	let multi_sig = MultiSignature::from(sign);
+		// 	let result = multi_sig.verify(message.as_slice(), &address);
+		// 	if result {
+		// 		let certificate = Self::parse_json(message);
+		// 		let signature_data = SignatureData {
+		// 			address,
+		// 			message: certificate.clone(),
+		// 			signature: signature.clone(),
+		// 		};
+		// 		ensure!(
+		// 			signature !=
+		// 				LastSignature::<T>::get((
+		// 					certificate.collection_id.clone(),
+		// 					certificate.serve_id.clone(),
+		// 				))
+		// 				.signature,
+		// 			Error::<T>::SignatureUsed
+		// 		);
+		// 		LastSignature::<T>::insert(
+		// 			(certificate.collection_id, certificate.serve_id),
+		// 			signature_data,
+		// 		);
+		// 	}
+		// 	Self::deposit_event(Event::Test(result));
+		// 	Ok(().into())
+		// }
+
+		// TODO add remove serve
+		// #[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+		// pub fn remove_serve(
+		// 	origin: OriginFor<T>,
+		// 	collection_id: u32,
+		// 	serve_id: u32,
+		// ) -> DispatchResult {
+		// 	Ok(().into())
+		// }
 	}
 }
 
 impl<T: Config> Pallet<T> {
-	pub fn parse_json(message: Vec<u8>) -> Certificate {
-		let mut flag: Vec<u8> = Vec::new();
-		for x in 0..message.len() {
-			if let Some(44) = message.get(x) {
-				flag.push(x as u8);
-			}
-		}
-		let account_id = message[15..(*flag.get(0).unwrap() as usize - 1)].to_vec();
-		let collection_id = message
-			[*flag.get(0).unwrap() as usize + 18..(*flag.get(1).unwrap() as usize - 1)]
-			.to_vec();
-		let serve_id = message[*flag.get(1).unwrap() as usize + 13..message.len() - 2].to_vec();
-		let times = message[*flag.get(1).unwrap() as usize + 13..message.len() - 3].to_vec();
-		return Certificate { account_id, collection_id, serve_id, times }
-	}
+	// pub fn parse_json(message: Vec<u8>) -> Certificate {
+	// 	let mut flag: Vec<u8> = Vec::new();
+	// 	for x in 0..message.len() {
+	// 		if let Some(44) = message.get(x) {
+	// 			flag.push(x as u8);
+	// 		}
+	// 	}
+	// 	let account_id = message[15..(*flag.get(0).unwrap() as usize - 1)].to_vec();
+	// 	let collection_id = message
+	// 		[*flag.get(0).unwrap() as usize + 18..(*flag.get(1).unwrap() as usize - 1)]
+	// 		.to_vec();
+	// 	let serve_id = message[*flag.get(1).unwrap() as usize + 13..message.len() - 2].to_vec();
+	// 	let times = message[*flag.get(1).unwrap() as usize + 13..message.len() - 3].to_vec();
+	// 	let use_serve_deposit = message[*flag.get(1).unwrap() as usize + 13..message.len() - 3].to_vec();
+	// 	return Certificate { account_id, collection_id, serve_id, times ,use_serve_deposit}
+	// }
 	// The account ID of the vault
 	fn account_id() -> T::AccountId {
 		<T as Config>::PalletId::get().into_account()
-	}
-
-	pub fn do_registered_server_collection(
-		who: &T::AccountId,
-	) -> Result<CollectionId, DispatchError> {
-		// fees
-		let deposit = T::CreateCollectionDeposit::get();
-		let who_balance = <T as Config>::Currency::total_balance(&who);
-		ensure!(who_balance >= deposit, Error::<T>::NotEnoughBalance);
-		<T as Config>::Currency::transfer(who, &Self::account_id(), deposit, AllowDeath)?;
-
-		let collection_id =
-			NextCollectionId::<T>::try_mutate(|id| -> Result<CollectionId, DispatchError> {
-				let current_id = *id;
-				*id = id.checked_add(One::one()).ok_or(Error::<T>::NoAvailableCollectionId)?;
-				Ok(current_id)
-			})?;
-
-		let collection = Collection {
-			serve_builder: who.clone(),
-			serve_number: 0,
-			registered_serve_number_all: 0,
-			serve_deposit_all: 0,
-		};
-
-		Collections::<T>::insert(collection_id, collection);
-		Self::deposit_event(Event::CollectionCreated(collection_id, who.clone()));
-		Ok(collection_id)
-	}
-
-	pub fn do_registered_use_server_certificate(
-		who: &T::AccountId,
-		collection_id: u32,
-		serve_id: u32,
-		use_serve_deposit: Balance,
-	) -> DispatchResult {
-		let collection_serve = CollectionServe::<T>::get(collection_id, serve_id).ok_or(Error::<T>::CollectionNotFound)?;
-		ensure!(use_serve_deposit>=collection_serve.serve_metadata.serve_price,Error::<T>::UseServeDepositTooSmall);
-		let who_balance = <T as Config>::Currency::total_balance(&who);
-		let use_serve_deposit = BalanceOf::<T>::try_from(use_serve_deposit)
-			.map_err(|_| "balance expect u128 type")
-			.unwrap();
-		ensure!(who_balance >= use_serve_deposit, Error::<T>::NotEnoughBalance);
-		T::Currency::reserve(who, use_serve_deposit).map_err(|_| Error::<T>::NotEnoughBalance)?;
-		let certificate = Certificate{
-			account_id: who.encode(),
-			collection_id: collection_id.encode(),
-			serve_id: collection_id.encode(),
-			times: 0u32.encode(),
-		};
-		ServiceCertificate::<T>::insert((who, collection_id), serve_id, certificate.clone());
-
-		Self::deposit_event(Event::ServiceCertificateCreated(
-			who.clone(),
-			collection_id,
-			serve_id,
-			certificate,
-		));
-		Collections::<T>::mutate(collection_id,|collection|{
-			let collection = collection.as_mut().ok_or(Error::<T>::CollectionNotFound)?;
-			collection.registered_serve_number_all = collection.registered_serve_number_all.checked_add(1).ok_or(Error::<T>::ServeNumberOverflow)?;
-			CollectionServe::<T>::mutate(collection_id, serve_id, |serve|{
-				let serve = serve.as_mut().ok_or(Error::<T>::CollectionNotFound)?;
-				serve.registered_serve_number = serve.registered_serve_number.checked_add(1).ok_or(Error::<T>::ServeNumberOverflow)?;
-				Ok(())
-			})
-		})
-	}
-
-	pub fn do_add_serve(
-		who: T::AccountId,
-		collection_id: u32,
-		serve_types: ServeTypes,
-		serve_ways: ServeWays,
-		serve_state: ServeState,
-		serve_switch: bool,
-		serve_version: Vec<u8>,
-		serve_name: Vec<u8>,
-		serve_description: Vec<u8>,
-		serve_url: Vec<u8>,
-		serve_price: Balance,
-		server_limit_time: Option<TimeTypes>,
-		server_limit_times: Option<u32>,
-		serve_deposit: Balance,
-	) -> DispatchResult {
-		let who_balance = <T as Config>::Currency::total_balance(&who);
-		let serve_deposit_balance = BalanceOf::<T>::try_from(serve_deposit as u8)
-			.map_err(|_| "balance expect u128 type")
-			.unwrap();
-		ensure!(who_balance >= serve_deposit_balance, Error::<T>::NotEnoughBalance);
-
-		// Generate account from collection_id
-		let next_collection_serve_id = NextCollectionServeId::<T>::get(collection_id);
-		let escrow_account: <T as frame_system::Config>::AccountId =
-			<T as pallet::Config>::PalletId::get().into_sub_account(next_collection_serve_id);
-
-		<T as Config>::Currency::transfer(
-			&who,
-			&escrow_account,
-			serve_deposit_balance,
-			AllowDeath,
-		)?;
-
-		let serve_id = NextCollectionServeId::<T>::try_mutate(
-			collection_id,
-			|id| -> Result<CollectionId, DispatchError> {
-				let current_id = *id;
-				*id = id.checked_add(One::one()).ok_or(Error::<T>::NoAvailableCollectionId)?;
-				Ok(current_id)
-			},
-		)?;
-
-		let bounded_serve_version: BoundedVec<u8, T::StringLimit> =
-			serve_version.clone().try_into().map_err(|_| Error::<T>::BadMetadata)?;
-
-		let bounded_serve_name: BoundedVec<u8, T::StringLimit> =
-			serve_name.clone().try_into().map_err(|_| Error::<T>::BadMetadata)?;
-
-		let bounded_serve_description: BoundedVec<u8, T::StringLimit> =
-			serve_description.clone().try_into().map_err(|_| Error::<T>::BadMetadata)?;
-
-		let bounded_serve_url: BoundedVec<u8, T::StringLimit> =
-			serve_url.clone().try_into().map_err(|_| Error::<T>::BadMetadata)?;
-
-		let serve_metadata = ServeMetadata {
-			serve_types,
-			serve_ways,
-			serve_state,
-			serve_switch,
-			serve_version: bounded_serve_version,
-			serve_name: bounded_serve_name,
-			serve_description: bounded_serve_description,
-			serve_url: bounded_serve_url,
-			serve_price,
-			server_limit_time,
-			server_limit_times,
-		};
-
-		let new_serve =
-			Serve { escrow_account, registered_serve_number: 0, serve_metadata, serve_deposit };
-		CollectionServe::<T>::insert(collection_id, serve_id, new_serve);
-		Collections::<T>::mutate(collection_id,|collection|{
-			if let Some(ref mut c) = collection {
-				c.serve_number = c.serve_number.checked_add(1).ok_or(Error::<T>::ServeNumberOverflow)?;
-			}
-
-			Self::deposit_event(Event::CollectionServeCreated(collection_id, serve_id, who));
-			Ok(())
-		})
-	}
-
-	pub fn do_remove_serve(who: T::AccountId, collection_id: u32, serve_id: u32) {
-		let Serve { serve_deposit, escrow_account, .. } =
-			<CollectionServe<T>>::take(collection_id, serve_id).unwrap();
-		let serve_deposit_balance = BalanceOf::<T>::try_from(serve_deposit as u8)
-			.map_err(|_| "balance expect u128 type")
-			.unwrap();
-		<T as Config>::Currency::transfer(&escrow_account, &who, serve_deposit_balance, AllowDeath);
-		// remove storage, lock and unreserve.
-		// T::Currency::remove_lock(T::PalletId::get(), who);
-
-		// NOTE: we could check the deposit amount before removing and skip if zero, but it will be
-		// a noop anyhow.
-		// let _remainder = T::Currency::unreserve(who, serve_deposit);
-		// debug_assert!(_remainder.is_zero());
 	}
 }

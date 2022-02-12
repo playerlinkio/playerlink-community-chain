@@ -598,14 +598,16 @@ parameter_types! {
 	pub const MarketplacePalletId: PalletId = PalletId(*b"pl/serve");
 	pub const StringLimit: u32 = 50;
 	/// 100 PL  create a serve store
-	pub const CreateCollectionDeposit: Balance = 100 * PL;
+	pub const CreateCollectionMinBalance: Balance = 100 * PL;
+	pub const CreateServeMinBalance: Balance = 10 * PL;
 }
 
 impl pallet_serve::Config for Runtime {
 	type Event = Event;
 	type StringLimit = StringLimit;
 	type PalletId = MarketplacePalletId;
-	type CreateCollectionDeposit = CreateCollectionDeposit;
+	type CreateCollectionMinBalance = CreateCollectionMinBalance;
+	type CreateServeMinBalance = CreateServeMinBalance;
 	type Currency = Balances;
 }
 
