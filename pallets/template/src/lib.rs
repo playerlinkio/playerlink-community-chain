@@ -19,9 +19,9 @@ pub mod weights;
 
 #[frame_support::pallet]
 pub mod pallet {
+	use crate::WeightInfo;
 	use frame_support::{dispatch::DispatchResult, pallet_prelude::*};
 	use frame_system::pallet_prelude::*;
-	use crate::WeightInfo;
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]

@@ -33,9 +33,8 @@ fn test1() {
 			Some(TimeTypes::Day),
 			Some(20),
 		));
-		assert_ok!(Serve::registered_use_server_certificate(Origin::signed(1),0,0,0));
+		assert_ok!(Serve::registered_use_server_certificate(Origin::signed(1), 0, 0, 0));
 		// Read pallet storage and assert an expected result.
 		// assert_eq!(TemplateModule::something(), Some(42));
 	});
 }
-

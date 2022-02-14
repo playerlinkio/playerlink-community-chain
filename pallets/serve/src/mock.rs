@@ -1,13 +1,13 @@
 use crate as pallet_serve;
-use frame_support::{parameter_types, traits::GenesisBuild,PalletId};
+use frame_support::{parameter_types, traits::GenesisBuild, PalletId};
 use frame_system as system;
 use pallet_balances::AccountData;
+pub use pallet_serve::{ServeState, ServeTypes, ServeWays, TimeTypes};
 use sp_core::H256;
 use sp_runtime::{
-    testing::Header,
-    traits::{BlakeTwo256, IdentityLookup},
+	testing::Header,
+	traits::{BlakeTwo256, IdentityLookup},
 };
-pub use pallet_serve::{ServeTypes,ServeWays,ServeState,TimeTypes};
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -15,21 +15,21 @@ type Balance = u128;
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(
-    pub enum Test where
-        Block = Block,
-        NodeBlock = Block,
-        UncheckedExtrinsic = UncheckedExtrinsic,
-    {
-        System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
-        Serve: pallet_serve::{Pallet, Call,Storage, Event<T>},
+	pub enum Test where
+		Block = Block,
+		NodeBlock = Block,
+		UncheckedExtrinsic = UncheckedExtrinsic,
+	{
+		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
+		Serve: pallet_serve::{Pallet, Call,Storage, Event<T>},
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
-    }
+	}
 );
 
 parameter_types! {
-    pub const BlockHashCount: u64 = 250;
-    pub const SS58Prefix: u8 = 42;
-    pub const MaxDataSize: u32 = 1024 * 1024;
+	pub const BlockHashCount: u64 = 250;
+	pub const SS58Prefix: u8 = 42;
+	pub const MaxDataSize: u32 = 1024 * 1024;
 }
 
 impl system::Config for Test {
@@ -60,9 +60,9 @@ impl system::Config for Test {
 }
 
 parameter_types! {
-    pub const ExistentialDeposit: u128 = 500;
-    pub const MaxLocks: u32 = 50;
-    pub const MaxReserves: u32 = 50;
+	pub const ExistentialDeposit: u128 = 500;
+	pub const MaxLocks: u32 = 50;
+	pub const MaxReserves: u32 = 50;
 }
 
 impl pallet_balances::Config for Test {
@@ -97,11 +97,8 @@ impl pallet_serve::Config for Test {
 }
 
 // Build test environment by setting the admin `key` for the Genesis.
-pub fn new_test_ext(
-) -> sp_io::TestExternalities {
-    let mut t = frame_system::GenesisConfig::default()
-        .build_storage::<Test>()
-        .unwrap();
+pub fn new_test_ext() -> sp_io::TestExternalities {
+	let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
 
 	pallet_balances::GenesisConfig::<Test> {
 		balances: vec![
@@ -111,21 +108,18 @@ pub fn new_test_ext(
 			(4, 10_000_000_000_000),
 		],
 	}
-		.assimilate_storage(&mut t)
-		.unwrap();
+	.assimilate_storage(&mut t)
+	.unwrap();
 
-    let mut ext = sp_io::TestExternalities::new(t);
-    ext.execute_with(|| System::set_block_number(1));
-    ext
+	let mut ext = sp_io::TestExternalities::new(t);
+	ext.execute_with(|| System::set_block_number(1));
+	ext
 }
 
 pub(crate) fn last_event() -> Event {
-    system::Pallet::<Test>::events()
-        .pop()
-        .expect("Event expected")
-        .event
+	system::Pallet::<Test>::events().pop().expect("Event expected").event
 }
 
 pub(crate) fn expect_event<E: Into<Event>>(e: E) {
-    assert_eq!(last_event(), e.into());
+	assert_eq!(last_event(), e.into());
 }
