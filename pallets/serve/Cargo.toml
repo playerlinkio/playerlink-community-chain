@@ -11,7 +11,8 @@ repository = "https://github.com/playerlinkio/playerlink-community-chain/"
 
 
 [dependencies]
-#hex = { version = "0.4", default-features = false}
+hex = { version = "0.4", default-features = false}
+base58 = { version = "0.2.0"}
 codec = { package = "parity-scale-codec", version = "2.2.0", default-features = false, features = ["derive", "max-encoded-len"] }
 scale-info = { version = "1.0", default-features = false, features = ["derive"] }
 
@@ -32,12 +33,14 @@ sp-application-crypto = { git = "https://github.com/paritytech/substrate",branch
 
 [dev-dependencies]
 log = { version = "0.4.14", default-features = false }
+pallet-balances = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.11" }
+
 
 [features]
 default = ["std"]
 runtime-benchmarks = ["frame-benchmarking"]
 std = [
-#	"hex/std",
+	"hex/std",
 	"sp-io/std",
 	"sp-core/std",
 	"sp-std/std",

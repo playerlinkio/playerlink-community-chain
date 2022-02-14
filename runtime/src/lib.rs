@@ -600,6 +600,7 @@ parameter_types! {
 	/// 100 PL  create a serve store
 	pub const CreateCollectionMinBalance: Balance = 100 * PL;
 	pub const CreateServeMinBalance: Balance = 10 * PL;
+	pub const MessageMinBytes: u32 = 112;
 }
 
 impl pallet_serve::Config for Runtime {
@@ -609,6 +610,7 @@ impl pallet_serve::Config for Runtime {
 	type CreateCollectionMinBalance = CreateCollectionMinBalance;
 	type CreateServeMinBalance = CreateServeMinBalance;
 	type Currency = Balances;
+	type MessageMinBytes = MessageMinBytes;
 }
 
 impl pallet_authentication::Config for Runtime {

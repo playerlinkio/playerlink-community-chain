@@ -388,6 +388,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5024ee8015f02155eee35c711107ddd9a9bf3cb689cf2a9089c97e79b6e1ae83"
 
 [[package]]
+name = "base58"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6107fe1be6682a68940da878d9e9f5e90ca5745b3dec9fd1bb393c8777d4f581"
+
+[[package]]
 name = "base64"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3927,10 +3933,13 @@ dependencies = [
 name = "pallet-serve"
 version = "0.0.1"
 dependencies = [
+ "base58 0.2.0",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
+ "hex",
  "log",
+ "pallet-balances",
  "parity-scale-codec",
  "playerlink-primitives",
  "scale-info",
@@ -6649,7 +6658,7 @@ name = "sp-core"
 version = "4.0.0-dev"
 source = "git+https://github.com/paritytech/substrate?branch=polkadot-v0.9.11#57346f6b24875f8935280dba51fa8ab0a9ba1e39"
 dependencies = [
- "base58",
+ "base58 0.1.0",
  "blake2-rfc",
  "byteorder",
  "dyn-clonable",
