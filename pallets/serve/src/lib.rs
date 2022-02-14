@@ -216,6 +216,8 @@ pub mod pallet {
 		CollectionCreated(CollectionId, T::AccountId),
 		CollectionServeCreated(CollectionId, ServeId, T::AccountId),
 		ServiceCertificateCreated(T::AccountId, CollectionId, ServeId, Certificate),
+		Deposit(T::AccountId,T::AccountId,BalanceOf<T>),
+		Withdrawal(T::AccountId,T::AccountId,BalanceOf<T>),
 		Test(bool),
 	}
 
@@ -234,8 +236,8 @@ pub mod pallet {
 		ServiceCertificateNotFound,
 		NoPermission,
 		ParseJsonFailed,
-		InvalidSS58Address,
 		VerifySignatureFailed,
+		UseServeEscrowAccountNotFound
 	}
 
 	#[pallet::hooks]
@@ -358,6 +360,27 @@ pub mod pallet {
 					Ok(())
 				})
 			})
+		}
+
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+		pub fn deposit(origin: OriginFor<T>,collection_id:CollectionId,serve_id:ServeId,use_serve_deposit: BalanceOf<T>) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+			let who_u8_32:[u8;32] = (who.clone().encode().as_slice()).try_into().unwrap();
+			let who_account_id32 = AccountId32::from(who_u8_32);
+			let escrow_account = UseServeEscrowAccount::<T>::get((who_account_id32.clone(),collection_id),serve_id).ok_or(Error::<T>::UseServeEscrowAccountNotFound)?;
+			<T as Config>::Currency::transfer(&who,&escrow_account, use_serve_deposit,ExistenceRequirement::KeepAlive)?;
+			Self::deposit_event(Event::Deposit(who, escrow_account,use_serve_deposit));
+			Ok(())
+		}
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+		pub fn withdrawal(origin: OriginFor<T>,collection_id:CollectionId,serve_id:ServeId,use_serve_withdrawal: BalanceOf<T>) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+			let who_u8_32:[u8;32] = (who.clone().encode().as_slice()).try_into().unwrap();
+			let who_account_id32 = AccountId32::from(who_u8_32);
+			let escrow_account = UseServeEscrowAccount::<T>::get((who_account_id32.clone(),collection_id),serve_id).ok_or(Error::<T>::UseServeEscrowAccountNotFound)?;
+			<T as Config>::Currency::transfer(&escrow_account,&who, use_serve_withdrawal,ExistenceRequirement::AllowDeath)?;
+			Self::deposit_event(Event::Withdrawal(escrow_account, who,use_serve_withdrawal));
+			Ok(())
 		}
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
 		pub fn check(
