@@ -17,9 +17,8 @@ use frame_system::{ensure_signed, pallet_prelude::OriginFor};
 use scale_info::TypeInfo;
 use sp_application_crypto::sr25519::Signature;
 use sp_core::crypto::AccountId32;
-use sp_runtime::RuntimeDebug;
-use sp_runtime::traits::Saturating;
-use sp_std::{vec,str::from_utf8, vec::Vec};
+use sp_runtime::{traits::Saturating, RuntimeDebug};
+use sp_std::{str::from_utf8, vec, vec::Vec};
 
 pub use pallet::*;
 
@@ -203,9 +202,8 @@ pub mod pallet {
 	pub(super) type NextCollectionId<T: Config> = StorageValue<_, CollectionId, ValueQuery>;
 
 	#[pallet::storage]
-	pub(super) type EscrowAccountBlockNumber<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, T::BlockNumber>;
-
-
+	pub(super) type EscrowAccountBlockNumber<T: Config> =
+		StorageMap<_, Blake2_128Concat, T::AccountId, T::BlockNumber>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -293,11 +291,8 @@ pub mod pallet {
 			T::Currency::reserve(&who, min_balance).map_err(|_| Error::<T>::NotEnoughBalance)?;
 
 			let collection_serve_id = NextCollectionServeId::<T>::get(collection_id);
-			let escrow_account: <T as frame_system::Config>::AccountId = Self::serve_account_id(
-				who.clone().encode(),
-				collection_id,
-				collection_serve_id,
-			);
+			let escrow_account: <T as frame_system::Config>::AccountId =
+				Self::serve_account_id(who.clone().encode(), collection_id, collection_serve_id);
 			NextCollectionServeId::<T>::mutate(collection_id, |old_collection_serve_id| {
 				*old_collection_serve_id = old_collection_serve_id.saturating_add(1);
 			});
@@ -455,11 +450,13 @@ pub mod pallet {
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
-			let collection = Collections::<T>::get(collection_id).ok_or(Error::<T>::CollectionNotFound)?;
-			ensure!(collection.serve_builder==who,Error::<T>::NoPermission);
+			let collection =
+				Collections::<T>::get(collection_id).ok_or(Error::<T>::CollectionNotFound)?;
+			ensure!(collection.serve_builder == who, Error::<T>::NoPermission);
 			let serve = CollectionServe::<T>::get(collection_id, serve_id)
 				.ok_or(Error::<T>::ServeNotFound)?;
-			let escrow_account_balance = <T as Config>::Currency::total_balance(&serve.escrow_account);
+			let escrow_account_balance =
+				<T as Config>::Currency::total_balance(&serve.escrow_account);
 			Self::can_builder_withdrawal(serve.escrow_account.clone())?;
 			<T as Config>::Currency::transfer(
 				&serve.escrow_account,
@@ -467,7 +464,11 @@ pub mod pallet {
 				escrow_account_balance,
 				ExistenceRequirement::AllowDeath,
 			)?;
-			Self::deposit_event(Event::BuilderWithdrawal(serve.escrow_account, who, escrow_account_balance));
+			Self::deposit_event(Event::BuilderWithdrawal(
+				serve.escrow_account,
+				who,
+				escrow_account_balance,
+			));
 			Ok(())
 		}
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
@@ -514,12 +515,15 @@ pub mod pallet {
 				.ok_or(Error::<T>::ServeNotFound)?;
 			Collections::<T>::get(certificate.collection_id)
 				.ok_or(Error::<T>::CollectionNotFound)?;
-			let serve_escrow_account_balance = <T as Config>::Currency::total_balance(&serve.escrow_account);
+			let serve_escrow_account_balance =
+				<T as Config>::Currency::total_balance(&serve.escrow_account);
 
-			if serve_escrow_account_balance == 	BalanceOf::<T>::try_from(0 as u8)
-				.map_err(|_| "balance expect u128 type")
-				.unwrap() {
-				EscrowAccountBlockNumber::<T>::insert(serve.escrow_account.clone(),Self::now());
+			if serve_escrow_account_balance ==
+				BalanceOf::<T>::try_from(0 as u8)
+					.map_err(|_| "balance expect u128 type")
+					.unwrap()
+			{
+				EscrowAccountBlockNumber::<T>::insert(serve.escrow_account.clone(), Self::now());
 			};
 			<T as Config>::Currency::transfer(
 				&use_serve_escrow_account,
@@ -606,25 +610,30 @@ impl<T: Config> Pallet<T> {
 	}
 	// The account ID of the vault
 	fn user_account_id(account_id: Vec<u8>, collection_id: u32, serve_id: u32) -> T::AccountId {
-		let extra = vec![collection_id as u8,serve_id as u8,9u8];
-		let temp_account:Vec<u8> = [&account_id[0..(account_id.len()/2)], extra.as_slice()].concat();
+		let extra = vec![collection_id as u8, serve_id as u8, 9u8];
+		let temp_account: Vec<u8> =
+			[&account_id[0..(account_id.len() / 2)], extra.as_slice()].concat();
 		T::PalletId::get().into_sub_account(temp_account)
 	}
 	// The account ID of the vault
 	fn serve_account_id(account_id: Vec<u8>, collection_id: u32, serve_id: u32) -> T::AccountId {
-		let extra = vec![collection_id as u8,serve_id as u8];
-		let temp_account:Vec<u8> = [&account_id[0..(account_id.len()/2)], extra.as_slice()].concat();
+		let extra = vec![collection_id as u8, serve_id as u8];
+		let temp_account: Vec<u8> =
+			[&account_id[0..(account_id.len() / 2)], extra.as_slice()].concat();
 		T::PalletId::get().into_sub_account(temp_account)
 	}
 	fn now() -> T::BlockNumber {
 		frame_system::Pallet::<T>::block_number()
 	}
 
-	fn can_builder_withdrawal(escrow_account:T::AccountId) ->DispatchResult {
+	fn can_builder_withdrawal(escrow_account: T::AccountId) -> DispatchResult {
 		let old_block_number = EscrowAccountBlockNumber::<T>::get(escrow_account);
 		match old_block_number {
-			Some(b) => ensure!(b.saturating_add(T::QuestionPeriod::get())<Self::now(),Error::<T>::QuestionPeriodNotPassed),
-			None => ensure!(false,Error::<T>::CheckUnused),
+			Some(b) => ensure!(
+				b.saturating_add(T::QuestionPeriod::get()) < Self::now(),
+				Error::<T>::QuestionPeriodNotPassed
+			),
+			None => ensure!(false, Error::<T>::CheckUnused),
 		}
 		Ok(())
 	}
