@@ -464,12 +464,15 @@ pub mod pallet {
 				escrow_account_balance,
 				ExistenceRequirement::AllowDeath,
 			)?;
-			Self::deposit_event(Event::BuilderWithdrawal(
-				serve.escrow_account,
-				who,
-				escrow_account_balance,
-			));
-			Ok(())
+			EscrowAccountBlockNumber::<T>::mutate(serve.escrow_account.clone(),|block_number|{
+				*block_number=Some(Self::now());
+				Self::deposit_event(Event::BuilderWithdrawal(
+					serve.escrow_account,
+					who,
+					escrow_account_balance,
+				));
+				Ok(())
+			})
 		}
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
 		pub fn check(
