@@ -1,31 +1,26 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use base58::{ToBase58, FromBase58};
+use base58::FromBase58;
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
-	dispatch::{DispatchError, DispatchResult},
+	dispatch::DispatchResult,
 	ensure,
 	sp_runtime::traits::AccountIdConversion,
 	traits::{Currency, ExistenceRequirement, Get, ReservableCurrency},
-	BoundedVec,
 	transactional,
 };
 use frame_support::log;
 use frame_system::{ensure_signed, pallet_prelude::OriginFor};
-// use primitives::Balance;
 use frame_support::{
 	sp_runtime::{app_crypto::TryFrom, traits::Verify, MultiSignature},
 	traits::LockableCurrency,
 };
 use scale_info::TypeInfo;
 use sp_application_crypto::sr25519::Signature;
-use sp_runtime::{traits::One, RuntimeDebug, DispatchResultWithInfo};
+use sp_runtime::RuntimeDebug;
 use sp_std::vec::Vec;
-use sp_std::str::{from_utf8,Utf8Error};
-
-use sp_core::hash::H256;
+use sp_std::str::from_utf8;
 use sp_core::crypto::AccountId32;
-// use sp_application_crypto::Public;
 
 
 pub use pallet::*;
