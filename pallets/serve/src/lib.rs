@@ -124,6 +124,7 @@ pub mod pallet {
 	use super::*;
 	use frame_support::{pallet_prelude::*, PalletId};
 	use frame_system::pallet_prelude::BlockNumberFor;
+	use test::RunIgnored::No;
 
 
 	#[pallet::config]
@@ -218,6 +219,7 @@ pub mod pallet {
 		ServiceCertificateCreated(T::AccountId, CollectionId, ServeId, Certificate),
 		Deposit(T::AccountId,T::AccountId,BalanceOf<T>),
 		Withdrawal(T::AccountId,T::AccountId,BalanceOf<T>),
+		RemoveServe(T::AccountId,u32,u32),
 		Test(bool),
 	}
 
@@ -226,6 +228,7 @@ pub mod pallet {
 	pub enum Error<T> {
 		NoAvailableCollectionId,
 		CollectionNotFound,
+		ServeNotFound,
 		BadMetadata,
 		NotEnoughBalance,
 		SignatureUsed,
@@ -234,6 +237,7 @@ pub mod pallet {
 		UseServeDepositTooSmall,
 		LessThanMessageMinBytes,
 		ServiceCertificateNotFound,
+		ServiceCertificateExisted,
 		NoPermission,
 		ParseJsonFailed,
 		VerifySignatureFailed,
@@ -330,6 +334,8 @@ pub mod pallet {
 
 			let who_u8_32:[u8;32] = (who.clone().encode().as_slice()).try_into().unwrap();
 			let who_account_id32 = AccountId32::from(who_u8_32);
+			let service_certificate = ServiceCertificate::<T>::get((who_account_id32.clone(),collection_id),serve_id);
+			ensure!(service_certificate==None,Error::<T>::ServiceCertificateExisted);
 			CollectionServe::<T>::get(collection_id, serve_id).ok_or(Error::<T>::CollectionNotFound)?;
 			let escrow_account: <T as frame_system::Config>::AccountId = Self::account_id(who.clone().encode(),collection_id,serve_id);
 			<T as Config>::Currency::transfer(&who,&escrow_account, use_serve_deposit,ExistenceRequirement::KeepAlive)?;
@@ -410,8 +416,8 @@ pub mod pallet {
 			ensure!(result,Error::<T>::VerifySignatureFailed);
 
 			let use_serve_escrow_ccount = UseServeEscrowAccount::<T>::get((address.clone(),certificate.collection_id),certificate.serve_id).unwrap();
-			let serve = CollectionServe::<T>::get(certificate.collection_id,certificate.serve_id).unwrap();
-			let collection = Collections::<T>::get(certificate.collection_id).unwrap();
+			let serve = CollectionServe::<T>::get(certificate.collection_id,certificate.serve_id).ok_or(Error::<T>::ServeNotFound)?;
+			let collection = Collections::<T>::get(certificate.collection_id).ok_or(Error::<T>::CollectionNotFound)?;
 			<T as Config>::Currency::transfer(&use_serve_escrow_ccount,&collection.serve_builder, serve.serve_metadata.serve_price,ExistenceRequirement::AllowDeath)?;
 			ServiceCertificate::<T>::mutate((address.clone(),certificate.collection_id), certificate.serve_id, |c|{
 				let old_certificate = c.as_mut().ok_or(Error::<T>::ServiceCertificateNotFound)?;
@@ -420,10 +426,25 @@ pub mod pallet {
 				Ok(())
 			})
 		}
-
-		// TODO add remove serve
+		// TODO: remove_serve
 		// #[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
 		// pub fn remove_serve(
+		// 	origin: OriginFor<T>,
+		// 	collection_id: u32,
+		// 	serve_id: u32,
+		// ) -> DispatchResult {
+		// 	let _who = ensure_signed(origin)?;
+		// 	let collection = Collections::<T>::get(collection_id).ok_or(Error::<T>::CollectionNotFound)?;
+		// 	ensure!(collection.serve_builder==who,Error::<T>::NoPermission);
+		// 	CollectionServe::<T>::mutate(collection_id, serve_id, |serve|{
+		// 		*serve= None;
+		// 		Self::deposit_event(Event::RemoveServe(_who,collection_id,serve_id));
+		// 		Ok(())
+		// 	})
+		// }
+		// TODO: remove_collection
+		// #[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+		// pub fn remove_collection(
 		// 	origin: OriginFor<T>,
 		// 	collection_id: u32,
 		// 	serve_id: u32,
