@@ -124,7 +124,6 @@ pub mod pallet {
 	use super::*;
 	use frame_support::{pallet_prelude::*, PalletId};
 	use frame_system::pallet_prelude::BlockNumberFor;
-	use test::RunIgnored::No;
 
 
 	#[pallet::config]
@@ -197,15 +196,6 @@ pub mod pallet {
 	#[pallet::getter(fn next_collection_serve_id)]
 	pub(super) type NextCollectionServeId<T: Config> =
 		StorageMap<_, Blake2_128Concat, CollectionId, ServeId, ValueQuery>;
-
-	#[pallet::storage]
-	#[pallet::getter(fn last_signature)]
-	pub(super) type LastSignature<T: Config> = StorageMap<
-		_,
-		Blake2_128Concat,
-		(CollectionId,ServeId),
-		SignatureData,
-	>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn next_collection_id)]
