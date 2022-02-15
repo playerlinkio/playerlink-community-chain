@@ -193,6 +193,10 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
+	#[pallet::getter(fn next_escrow_account_id)]
+	pub(super) type NextEscrowAccountId<T: Config> = StorageValue<_, u32, ValueQuery>;
+
+	#[pallet::storage]
 	#[pallet::getter(fn next_collection_serve_id)]
 	pub(super) type NextCollectionServeId<T: Config> =
 		StorageMap<_, Blake2_128Concat, CollectionId, ServeId, ValueQuery>;
@@ -291,8 +295,7 @@ pub mod pallet {
 			T::Currency::reserve(&who, min_balance).map_err(|_| Error::<T>::NotEnoughBalance)?;
 
 			let collection_serve_id = NextCollectionServeId::<T>::get(collection_id);
-			let escrow_account: <T as frame_system::Config>::AccountId =
-				Self::serve_account_id(who.clone().encode(), collection_id, collection_serve_id);
+			let escrow_account: <T as frame_system::Config>::AccountId = Self::account_id();
 			NextCollectionServeId::<T>::mutate(collection_id, |old_collection_serve_id| {
 				*old_collection_serve_id = old_collection_serve_id.saturating_add(1);
 			});
@@ -343,8 +346,7 @@ pub mod pallet {
 			ensure!(service_certificate == None, Error::<T>::ServiceCertificateExisted);
 			CollectionServe::<T>::get(collection_id, serve_id)
 				.ok_or(Error::<T>::CollectionNotFound)?;
-			let escrow_account: <T as frame_system::Config>::AccountId =
-				Self::user_account_id(who.clone().encode(), collection_id, serve_id);
+			let escrow_account: <T as frame_system::Config>::AccountId = Self::account_id();
 			<T as Config>::Currency::transfer(
 				&who,
 				&escrow_account,
@@ -464,8 +466,8 @@ pub mod pallet {
 				escrow_account_balance,
 				ExistenceRequirement::AllowDeath,
 			)?;
-			EscrowAccountBlockNumber::<T>::mutate(serve.escrow_account.clone(),|block_number|{
-				*block_number=Some(Self::now());
+			EscrowAccountBlockNumber::<T>::mutate(serve.escrow_account.clone(), |block_number| {
+				*block_number = Some(Self::now());
 				Self::deposit_event(Event::BuilderWithdrawal(
 					serve.escrow_account,
 					who,
@@ -612,11 +614,12 @@ impl<T: Config> Pallet<T> {
 		})
 	}
 	// The account ID of the vault
-	fn user_account_id(account_id: Vec<u8>, collection_id: u32, serve_id: u32) -> T::AccountId {
-		let extra = vec![collection_id as u8, serve_id as u8, 9u8];
-		let temp_account: Vec<u8> =
-			[&account_id[0..(account_id.len() / 2)], extra.as_slice()].concat();
-		T::PalletId::get().into_sub_account(temp_account)
+	fn account_id() -> T::AccountId {
+		let escrow_account_id = Self::next_escrow_account_id();
+		NextEscrowAccountId::<T>::mutate(|e| {
+			*e = escrow_account_id.saturating_add(1);
+		});
+		T::PalletId::get().into_sub_account(escrow_account_id)
 	}
 	// The account ID of the vault
 	fn serve_account_id(account_id: Vec<u8>, collection_id: u32, serve_id: u32) -> T::AccountId {
