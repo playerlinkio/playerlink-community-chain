@@ -2,8 +2,8 @@ use playerlink_runtime::{
 	AccountId, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig, Signature, SudoConfig,
 	SystemConfig, WASM_BINARY,
 };
-use serde_json::json;
 use sc_service::ChainType;
+use serde_json::json;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{sr25519, Pair, Public};
 use sp_finality_grandpa::AuthorityId as GrandpaId;
@@ -75,9 +75,9 @@ pub fn development_config() -> Result<ChainSpec, String> {
 				"tokenDecimals": 10,
 				"tokenSymbol": "PL"
 			})
-				.as_object()
-				.expect("Provided valid json map")
-				.clone(),
+			.as_object()
+			.expect("Provided valid json map")
+			.clone(),
 		),
 		// Extensions
 		None,
@@ -130,9 +130,9 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 				"tokenDecimals": 10,
 				"tokenSymbol": "PL"
 			})
-				.as_object()
-				.expect("Provided valid json map")
-				.clone(),
+			.as_object()
+			.expect("Provided valid json map")
+			.clone(),
 		),
 		// Extensions
 		None,
@@ -168,10 +168,10 @@ fn testnet_genesis(
 			key: root_key,
 		},
 		council: Default::default(),
-        elections: Default::default(),
-        democracy: Default::default(),
-        technical_committee: Default::default(),
-        technical_membership: Default::default(),
-        treasury: Default::default(),
+		elections: Default::default(),
+		democracy: Default::default(),
+		technical_committee: Default::default(),
+		technical_membership: Default::default(),
+		treasury: Default::default(),
 	}
 }
